@@ -4,6 +4,7 @@ export { firstService } from "./src/firstService.js"
 export { jsenvAccessControlAllowedHeaders } from "./src/jsenvAccessControlAllowedHeaders.js"
 export { jsenvAccessControlAllowedMethods } from "./src/jsenvAccessControlAllowedMethods.js"
 export { jsenvPrivateKey, jsenvPublicKey, jsenvCertificate } from "./src/jsenvSignature.js"
+export { serveFile } from "./src/serveFile.js"
 export { startServer } from "./src/startServer.js"
 export {
   STOP_REASON_INTERNAL_ERROR,

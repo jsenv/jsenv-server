@@ -1,4 +1,4 @@
-import { firstOperationMatching } from "@dmail/helper"
+import { firstOperationMatching } from "@jsenv/cancellation"
 
 export const firstService = (...callbacks) => {
   return firstOperationMatching({

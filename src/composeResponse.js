@@ -1,4 +1,5 @@
-import { composeResponseHeaders } from "./composeResponseHeaders.js"
+import { compositionMappingToComposeStrict } from "./internal/compositionMappingToComposeStrict.js"
+import { composeResponseHeaders } from "./internal/composeResponseHeaders.js"
 
 const responseCompositionMapping = {
   status: (prevStatus, status) => status,

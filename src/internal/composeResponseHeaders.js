@@ -1,5 +1,13 @@
+import { compositionMappingToCompose } from "./compositionMappingToCompose.js"
+
 const composeHeaderValues = (value, nextValue) => {
-  return arrayWithoutDuplicate([...value.split(", "), ...nextValue.split(", ")]).join(", ")
+  const headerValues = value.split(", ")
+  nextValue.split(", ").forEach((value) => {
+    if (!headerValues.includes(value)) {
+      headerValues.push(value)
+    }
+  })
+  return headerValues
 }
 
 const headerCompositionMapping = {

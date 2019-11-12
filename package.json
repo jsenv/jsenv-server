@@ -37,7 +37,7 @@
 		"postpublish": "node ./script/transform-package/restore-postinstall.js"
 	},
 	"dependencies": {
-		"@jsenv/cancellation": "1.0.0",
+		"@jsenv/cancellation": "1.1.0",
 		"@jsenv/node-signals": "1.0.0",
 		"@jsenv/logger": "3.1.0"
 	},
