@@ -38,6 +38,16 @@
 
 Implemented in [src/startServer.js](../src/startServer.js), you can use it as shown below.
 
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  protocol: "https",
+  ip: "127.0.0.1",
+  port: 80,
+})
+```
+
 # startServer parameters
 
 ## protocol

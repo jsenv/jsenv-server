@@ -5,7 +5,7 @@
 [![github ci](https://github.com/jsenv/jsenv-server/workflows/ci/badge.svg)](https://github.com/jsenv/jsenv-server/actions?workflow=ci)
 [![codecov coverage](https://codecov.io/gh/jsenv/jsenv-server/branch/master/graph/badge.svg)](https://codecov.io/gh/jsenv/jsenv-server)
 
-Make your async function cancellable.
+High level api for node.js server.
 
 ## Table of contents
 
