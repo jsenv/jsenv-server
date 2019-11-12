@@ -83,9 +83,9 @@ export const serveFile = async (
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
           "last-modified": dateToUTCString(stat.mtime),
           "content-length": stat.size,
-          "content-type": ressourceToContentType(filesystemPath, contentTypeMap),
+          "content-type": filenameToContentType(path, contentTypeMap),
         },
-        body: createReadStream(filesystemPath),
+        body: createReadStream(path),
       }
     }
 
@@ -107,7 +107,7 @@ export const serveFile = async (
         headers: {
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
           "content-length": stat.size,
-          "content-type": ressourceToContentType(filesystemPath, contentTypeMap),
+          "content-type": filenameToContentType(path, contentTypeMap),
           etag: eTag,
         },
         body: buffer,

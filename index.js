@@ -1,4 +1,5 @@
 export { composeResponse } from "./src/composeResponse.js"
+export { createSSERoom } from "./src/createSSERoom.js"
 export { findFreePort } from "./src/findFreePort.js"
 export { firstService } from "./src/firstService.js"
 export { jsenvAccessControlAllowedHeaders } from "./src/jsenvAccessControlAllowedHeaders.js"
