@@ -10,24 +10,51 @@ Make your async function cancellable.
 ## Table of contents
 
 - [Presentation](#Presentation)
-- [Installation](#installation)
+- [Code example](#Code-example)
+- [api](#api)
+  - [startServer](./docs/start-server.md)
+  - [firstService](./docs/first-service.md)
+  - [serveFile](./docs/serve-file.md)
 
 ## Presentation
 
-`jsenv-server` github repository corresponds to `@jsenv/server` package published on github and npm package registries.
+jsenv/jsenv-server github repository publishes `@jsenv/server` package on github and npm package registries.
 
-`@jsenv/server` provides a pattern to make your code cancellable. It is an implementation of [cancellation API proposal](https://github.com/tc39/proposal-cancellation/tree/master/stage0) that does not provide 100% of the proposal.
+`@jsenv/server` helps to start server with a simplified api to focus on writing your application code. The api make your code easier to compose and test in isolation.
+
+## Code example
+
+The following code starts a server listening to `http://127.0.0.1:8080` responding `Hello world` as plain text.
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  protocol: "http",
+  ip: "127.0.0.1",
+  port: 8080,
+  requestToResponse: () => {
+    return {
+      status: 200,
+      headers: {
+        "content-type": "text/plain",
+      },
+      body: "Hello world",
+    }
+  },
+})
+```
+
+## api
+
+Api can be found in their own pages
+
+- [startServer](./docs/start-server.md)
+- [firstService](./docs/first-service.md)
+- [serveFile](./docs/serve-file.md)
 
 ## Installation
 
-If you have never installed a jsenv package, read [Installing a jsenv package](https://github.com/jsenv/jsenv-core/blob/master/docs/installing-jsenv-package.md#installing-a-jsenv-package) before going further.
-
-This documentation is up-to-date with a specific version so prefer any of the following commands
-
 ```console
 npm install @jsenv/server@1.0.0
-```
-
-```console
-yarn add @jsenv/server@1.0.0
 ```

@@ -36,7 +36,11 @@
 		"prepublishOnly": "node ./script/transform-package/remove-postinstall.js && npm run dist",
 		"postpublish": "node ./script/transform-package/restore-postinstall.js"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"@jsenv/cancellation": "1.0.0",
+		"@jsenv/node-signals": "1.0.0",
+		"@jsenv/logger": "3.0.0"
+	},
 	"devDependencies": {
 		"@dmail/assert": "3.14.0",
 		"@jsenv/auto-publish": "2.0.0",
