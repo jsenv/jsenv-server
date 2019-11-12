@@ -36,7 +36,7 @@
 
 > `startServer` is an async function starting a server.
 
-Implemented in [src/server/start-server.js](../src/server/start-server.js), you can use it as shown below.
+Implemented in [src/startServer.js](../src/startServer.js), you can use it as shown below.
 
 # startServer parameters
 
@@ -53,7 +53,7 @@ This parameter is optional with a default value of
 ### https protocol
 
 If you use `https` protocol a default self signed certificate will be used.<br />
-It can be found inside [src/server/signature.js](../src/server/signature.js).<br />
+It can be found inside [src/jsenvSignature.js](../src/jsenvSignature.js).<br />
 You may want to add this certificate to your system/browser trusted certificates.
 
 You can also pass your own certificate using `signature` parameter.

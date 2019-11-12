@@ -7,7 +7,7 @@ const composeHeaderValues = (value, nextValue) => {
       headerValues.push(value)
     }
   })
-  return headerValues
+  return headerValues.join(", ")
 }
 
 const headerCompositionMapping = {

@@ -13,7 +13,7 @@
 
 > `serveFile` is an async function that will search for a file on your filesysten and produce a response for it
 
-Implemented in [src/file-service/serve-file.js](../src/file-service/serve-file.js), you can use it as shown below.
+Implemented in [src/serveFile.js](../src/serveFile.js), you can use it as shown below.
 
 ```js
 import { serveFile } from "@jsenv/server"
@@ -90,17 +90,17 @@ When `"none"`: response will contain `"cache-control": "no-store"` header<br />
 
 > `contentTypeMap` is an object used to get content type from an url.
 
-This parameter is optional with a default value coming from [file-service/content-type-map.js](../src/file-service/content-type-map.js).
+This parameter is optional with a default value coming from [src/jsenvContentTypeMap.js](../src/jsenvContentTypeMap.js).
 
 You can extend `contentTypeMap` to add or replace contentTypes mapping like this:
 
 ```js
-import { serveFile } from "@jsenv/server"
+import { serveFile, jsenvContentTypeMap } from "@jsenv/server"
 
 const response = await serveFile("/Users/you/folder/index.html", {
   method: "GET",
   contentTypeMap: {
-    ...defaultContentTypeMap,
+    ...jsenvContentTypeMap,
     "application/x-whatever": {
       extensions: ["whatever", "whatever-2"],
     },

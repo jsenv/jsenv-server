@@ -5,7 +5,7 @@ const { createSelfSignature } = require("./createSelfSignature.js")
 const { publicKeyPem, privateKeyPem, certificatePem } = createSelfSignature()
 
 const jsenvServerDirectoryUrl = new URL("../../", pathToFileURL(__filename))
-const signatureFileUrl = new URL("./src/signature.js", jsenvServerDirectoryUrl)
+const signatureFileUrl = new URL("./src/jsenvSignature.js", jsenvServerDirectoryUrl)
 const signatureFilePath = fileURLToPath(signatureFileUrl)
 
 const pemToJavaScriptValue = (pem) => {

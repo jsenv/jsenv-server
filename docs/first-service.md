@@ -20,7 +20,7 @@ It works like this:
 
 > `firstService` is a function returning the first response produced by other functions.
 
-Implemented in [src/server/service-composition.js](../src/server/service-composition.js), you can use it as shown below.
+Implemented in [src/firstService.js](../src/firstService.js), you can use it as shown below.
 
 ```js
 import { firstService } from "@jsenv/server"

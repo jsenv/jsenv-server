@@ -27,6 +27,7 @@
 		"prettier-check": "node ./script/prettier-check/prettier-check.js",
 		"generate-coverage": "node ./script/generate-coverage/generate-coverage.js",
 		"upload-coverage": "node ./script/upload-coverage/upload-coverage.js",
+		"generate-jsenv-signature-file": "node ./script/generate-jsenv-signature-file/generate-jsenv-signature-file.js",
 		"generate-commonjs-bundle": "node ./script/generate-commonjs-bundle/generate-commonjs-bundle.js",
 		"generate-import-map": "node ./script/generate-import-map/generate-import-map.js",
 		"dist": "npm run clean && npm run generate-commonjs-bundle",
@@ -39,7 +40,8 @@
 	"dependencies": {
 		"@jsenv/cancellation": "1.1.0",
 		"@jsenv/node-signals": "1.0.0",
-		"@jsenv/logger": "3.1.0"
+		"@jsenv/logger": "3.1.0",
+		"kill-port": "1.5.2"
 	},
 	"devDependencies": {
 		"@dmail/assert": "3.14.0",
@@ -55,6 +57,7 @@
 		"@jsenv/prettier-config": "1.0.1",
 		"@jsenv/testing": "3.9.0",
 		"eslint": "6.6.0",
+		"node-fetch": "2.6.0",
 		"node-forge": "0.9.1",
 		"prettier": "1.19.1",
 		"rimraf": "3.0.0"
