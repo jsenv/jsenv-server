@@ -41,7 +41,7 @@
 		"@jsenv/cancellation": "1.1.0",
 		"@jsenv/node-signals": "1.0.0",
 		"@jsenv/logger": "3.1.0",
-		"kill-port": "1.5.2"
+		"kill-port": "1.6.0"
 	},
 	"devDependencies": {
 		"@dmail/assert": "3.14.0",
@@ -59,7 +59,7 @@
 		"eslint": "6.6.0",
 		"node-fetch": "2.6.0",
 		"node-forge": "0.9.1",
-		"prettier": "1.19.1",
+		"prettier": "1.18.2",
 		"rimraf": "3.0.0"
 	}
 }
