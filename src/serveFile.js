@@ -1,8 +1,8 @@
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { createReadStream, readFile, readdir, stat } from "fs"
 import { bufferToEtag } from "./internal/bufferToEtag.js"
 import { convertFileSystemErrorToResponseProperties } from "./internal/convertFileSystemErrorToResponseProperties.js"
-import { filenameToContentType } from "./filenameToContentType.js"
+import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
 
 export const serveFile = async (
@@ -21,16 +21,15 @@ export const serveFile = async (
     }
   }
 
-  if (path.startsWith("file:///")) {
-    path = fileURLToPath(path)
-  }
+  const fileUrl = path.startsWith("file:///") ? path : pathToFileURL(path)
+  const filePath = fileURLToPath(fileUrl)
 
   try {
     const cacheWithMtime = cacheStrategy === "mtime"
     const cacheWithETag = cacheStrategy === "etag"
     const cachedDisabled = cacheStrategy === "none"
 
-    const stat = await readFileStat(path)
+    const stat = await readFileStat(filePath)
 
     if (stat.isDirectory()) {
       if (canReadDirectory === false) {
@@ -43,7 +42,7 @@ export const serveFile = async (
         }
       }
 
-      const files = await readDirectory(path)
+      const files = await readDirectory(filePath)
       const filesAsJSON = JSON.stringify(files)
 
       return {
@@ -83,14 +82,14 @@ export const serveFile = async (
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
           "last-modified": dateToUTCString(stat.mtime),
           "content-length": stat.size,
-          "content-type": filenameToContentType(path, contentTypeMap),
+          "content-type": urlToContentType(fileUrl, contentTypeMap),
         },
-        body: createReadStream(path),
+        body: createReadStream(filePath),
       }
     }
 
     if (cacheWithETag) {
-      const buffer = await readFileAsBuffer(path)
+      const buffer = await readFileAsBuffer(filePath)
       const eTag = bufferToEtag(buffer)
 
       if ("if-none-match" in headers && headers["if-none-match"] === eTag) {
@@ -107,7 +106,7 @@ export const serveFile = async (
         headers: {
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
           "content-length": stat.size,
-          "content-type": filenameToContentType(path, contentTypeMap),
+          "content-type": urlToContentType(fileUrl, contentTypeMap),
           etag: eTag,
         },
         body: buffer,
@@ -119,9 +118,9 @@ export const serveFile = async (
       headers: {
         "cache-control": "no-store",
         "content-length": stat.size,
-        "content-type": filenameToContentType(path, contentTypeMap),
+        "content-type": urlToContentType(fileUrl, contentTypeMap),
       },
-      body: createReadStream(path),
+      body: createReadStream(filePath),
     }
   } catch (e) {
     return convertFileSystemErrorToResponseProperties(e)

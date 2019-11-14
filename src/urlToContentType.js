@@ -3,16 +3,17 @@
 import { extname } from "path"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
 
-export const filenameToContentType = (
-  filename,
+export const urlToContentType = (
+  url,
   contentTypeMap = jsenvContentTypeMap,
   contentTypeDefault = "application/octet-stream",
 ) => {
   if (typeof contentTypeMap !== "object") {
     throw new TypeError(`contentTypeMap must be an object, got ${contentTypeMap}`)
   }
+  const pathname = new URL(url).pathname
 
-  const extensionWithDot = extname(filename)
+  const extensionWithDot = extname(pathname)
 
   if (!extensionWithDot || extensionWithDot === ".") {
     return contentTypeDefault

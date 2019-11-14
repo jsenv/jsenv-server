@@ -1,7 +1,7 @@
 {
 	"name": "@jsenv/server",
-	"description": "High level api for node.js server",
-	"version": "1.0.0",
+	"description": "High level api for node.js server.",
+	"version": "1.1.0",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
