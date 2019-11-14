@@ -1,7 +1,7 @@
 import { fileURLToPath, pathToFileURL } from "url"
 import { createReadStream, readFile, readdir, stat } from "fs"
 import { bufferToEtag } from "./internal/bufferToEtag.js"
-import { convertFileSystemErrorToResponseProperties } from "./internal/convertFileSystemErrorToResponseProperties.js"
+import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemErrorToResponseProperties.js"
 import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
 
