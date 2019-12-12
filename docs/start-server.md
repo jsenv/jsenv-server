@@ -66,7 +66,7 @@ If you use `https` protocol a default self signed certificate will be used.<br /
 It can be found inside [src/jsenvSignature.js](../src/jsenvSignature.js).<br />
 You may want to add this certificate to your system/browser trusted certificates.
 
-You can also pass your own certificate using `signature` parameter.
+You can also pass your own certificate using `privateKey` and `certificate` parameters.
 The code below is a basic example showing how you could pass your own certificate.
 
 ```js
@@ -75,10 +75,8 @@ import { startServer } from "@jsenv/server"
 
 startServer({
   protocol: "https",
-  signature: {
-    privateKey: readFileSync(`${__dirname}/ssl/private.pem`),
-    certificate: readFileSync(`${__dirname}/ssl/cert.pem`),
-  },
+  privateKey: readFileSync(`${__dirname}/ssl/private.pem`),
+  certificate: readFileSync(`${__dirname}/ssl/cert.pem`),
 })
 ```
 
