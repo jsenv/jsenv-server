@@ -1,15 +1,16 @@
-import { createReadStream } from "fs"
+import { createReadStream, promises } from "fs"
 import {
   bufferToEtag,
   assertAndNormalizeFileUrl,
   readFileSystemNodeStat,
   readDirectory,
-  readFile,
   urlToFileSystemPath,
 } from "@jsenv/util"
 import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemErrorToResponseProperties.js"
 import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
+
+const { readFile } = promises
 
 export const serveFile = async (
   source,
@@ -72,8 +73,7 @@ export const serveFile = async (
     }
 
     if (cacheWithETag) {
-      const fileContentAsString = await readFile(sourceUrl)
-      const fileContentAsBuffer = Buffer.from(fileContentAsString)
+      const fileContentAsBuffer = await readFile(urlToFileSystemPath(sourceUrl))
       const fileContentEtag = bufferToEtag(fileContentAsBuffer)
 
       if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {

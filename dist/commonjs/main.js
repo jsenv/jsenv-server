@@ -3,12 +3,14 @@
 Object.defineProperty(exports, '__esModule', { value: true });
 
 var net = require('net');
-var url$1 = require('url');
-var fs = require('fs');
-var crypto = require('crypto');
 var path = require('path');
+var fs = require('fs');
+var url$1 = require('url');
+var crypto = require('crypto');
+var util = require('util');
 var http = require('http');
 var https = require('https');
+var module$1 = require('module');
 var stream = require('stream');
 
 const acceptsContentType = (acceptHeader, contentType) => {
@@ -135,14 +137,14 @@ const composeHeaderValues = (value, nextValue) => {
 };
 
 const headerCompositionMapping = {
-  accept: composeHeaderValues,
+  "accept": composeHeaderValues,
   "accept-charset": composeHeaderValues,
   "accept-language": composeHeaderValues,
   "access-control-allow-headers": composeHeaderValues,
   "access-control-allow-methods": composeHeaderValues,
   "access-control-allow-origin": composeHeaderValues,
   // 'content-type', // https://github.com/ninenines/cowboy/issues/1230
-  vary: composeHeaderValues
+  "vary": composeHeaderValues
 };
 const composeResponseHeaders = compositionMappingToCompose(headerCompositionMapping);
 
@@ -154,6 +156,68 @@ const responseCompositionMapping = {
   bodyEncoding: (prevEncoding, encoding) => encoding
 };
 const composeResponse = compositionMappingToComposeStrict(responseCompositionMapping);
+
+const convertFileSystemErrorToResponseProperties = error => {
+  // https://iojs.org/api/errors.html#errors_eacces_permission_denied
+  if (isErrorWithCode(error, "EACCES")) {
+    return {
+      status: 403,
+      statusText: "no permission to read file"
+    };
+  }
+
+  if (isErrorWithCode(error, "EPERM")) {
+    return {
+      status: 403,
+      statusText: "no permission to read file"
+    };
+  }
+
+  if (isErrorWithCode(error, "ENOENT")) {
+    return {
+      status: 404,
+      statusText: "file not found"
+    };
+  } // file access may be temporarily blocked
+  // (by an antivirus scanning it because recently modified for instance)
+
+
+  if (isErrorWithCode(error, "EBUSY")) {
+    return {
+      status: 503,
+      statusText: "file is busy",
+      headers: {
+        "retry-after": 0.01 // retry in 10ms
+
+      }
+    };
+  } // emfile means there is too many files currently opened
+
+
+  if (isErrorWithCode(error, "EMFILE")) {
+    return {
+      status: 503,
+      statusText: "too many file opened",
+      headers: {
+        "retry-after": 0.1 // retry in 100ms
+
+      }
+    };
+  }
+
+  if (isErrorWithCode(error, "EISDIR")) {
+    return {
+      status: 500,
+      statusText: "Unexpected directory operation"
+    };
+  }
+
+  return Promise.reject(error);
+};
+
+const isErrorWithCode = (error, code) => {
+  return typeof error === "object" && error.code === code;
+};
 
 const LOG_LEVEL_OFF = "off";
 const LOG_LEVEL_DEBUG = "debug";
@@ -209,14 +273,7 @@ const createLogger = ({
     };
   }
 
-  throw new Error(createUnexpectedLogLevelMessage({
-    logLevel
-  }));
-};
-
-const createUnexpectedLogLevelMessage = ({
-  logLevel
-}) => `unexpected logLevel.
+  throw new Error(`unexpected logLevel.
 --- logLevel ---
 ${logLevel}
 --- allowed log levels ---
@@ -224,9 +281,8 @@ ${LOG_LEVEL_OFF}
 ${LOG_LEVEL_ERROR}
 ${LOG_LEVEL_WARN}
 ${LOG_LEVEL_INFO}
-${LOG_LEVEL_DEBUG}
-`;
-
+${LOG_LEVEL_DEBUG}`);
+};
 const debug = console.debug;
 
 const debugDisabled = () => {};
@@ -354,7 +410,7 @@ const createSSERoom = ({
       headers: {
         "content-type": "text/event-stream",
         "cache-control": "no-cache",
-        connection: "keep-alive"
+        "connection": "keep-alive"
       },
       body
     };
@@ -777,96 +833,6 @@ q4DB6OgAEzkytbKtcgPlhY0GDbim8ELCpO1JNDn/jUXH74VJElwXMZqan5VaQ5c+
 qsCeVUdw8QsfIZH6XbkvhCswh4k=
 -----END CERTIFICATE-----`;
 
-const ressourceToSearchParamValue = (ressource, searchParamName) => {
-  const search = ressourceToSearch(ressource);
-  return new url$1.URLSearchParams(search).get(searchParamName);
-};
-
-const ressourceToSearch = ressource => {
-  const searchSeparatorIndex = ressource.indexOf("?");
-  return searchSeparatorIndex === -1 ? "?" : ressource.slice(searchSeparatorIndex);
-};
-
-const EMPTY_ID = '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
-const bufferToEtag = buffer => {
-  if (!Buffer.isBuffer(buffer)) {
-    throw new TypeError(`buffer expected, got ${buffer}`);
-  }
-
-  if (buffer.length === 0) {
-    return EMPTY_ID;
-  }
-
-  const hash = crypto.createHash("sha1");
-  hash.update(buffer, "utf8");
-  const hashBase64String = hash.digest("base64");
-  const hashBase64StringSubset = hashBase64String.slice(0, 27);
-  const length = buffer.length;
-  return `"${length.toString(16)}-${hashBase64StringSubset}"`;
-};
-
-const convertFileSystemErrorToResponseProperties = error => {
-  // https://iojs.org/api/errors.html#errors_eacces_permission_denied
-  if (isErrorWithCode(error, "EACCES")) {
-    return {
-      status: 403,
-      statusText: "no permission to read file"
-    };
-  }
-
-  if (isErrorWithCode(error, "EPERM")) {
-    return {
-      status: 403,
-      statusText: "no permission to read file"
-    };
-  }
-
-  if (isErrorWithCode(error, "ENOENT")) {
-    return {
-      status: 404,
-      statusText: "file not found"
-    };
-  } // file access may be temporarily blocked
-  // (by an antivirus scanning it because recently modified for instance)
-
-
-  if (isErrorWithCode(error, "EBUSY")) {
-    return {
-      status: 503,
-      statusText: "file is busy",
-      headers: {
-        "retry-after": 0.01 // retry in 10ms
-
-      }
-    };
-  } // emfile means there is too many files currently opened
-
-
-  if (isErrorWithCode(error, "EMFILE")) {
-    return {
-      status: 503,
-      statusText: "too many file opened",
-      headers: {
-        "retry-after": 0.1 // retry in 100ms
-
-      }
-    };
-  }
-
-  if (isErrorWithCode(error, "EISDIR")) {
-    return {
-      status: 500,
-      statusText: "Unexpected directory operation"
-    };
-  }
-
-  return Promise.reject(error);
-};
-
-const isErrorWithCode = (error, code) => {
-  return typeof error === "object" && error.code === code;
-};
-
 const jsenvContentTypeMap = {
   "application/javascript": {
     extensions: ["js", "mjs", "ts", "jsx"]
@@ -959,12 +925,13 @@ const jsenvContentTypeMap = {
 };
 
 // https://github.com/jshttp/mime-db/blob/master/src/apache-types.json
-const filenameToContentType = (filename, contentTypeMap = jsenvContentTypeMap, contentTypeDefault = "application/octet-stream") => {
+const urlToContentType = (url, contentTypeMap = jsenvContentTypeMap, contentTypeDefault = "application/octet-stream") => {
   if (typeof contentTypeMap !== "object") {
     throw new TypeError(`contentTypeMap must be an object, got ${contentTypeMap}`);
   }
 
-  const extensionWithDot = path.extname(filename);
+  const pathname = new URL(url).pathname;
+  const extensionWithDot = path.extname(pathname);
 
   if (!extensionWithDot || extensionWithDot === ".") {
     return contentTypeDefault;
@@ -979,7 +946,374 @@ const filenameToContentType = (filename, contentTypeMap = jsenvContentTypeMap, c
   return contentTypeForExtension || contentTypeDefault;
 };
 
-const serveFile = async (path, {
+const urlToSearchParamValue = (url, searchParamName) => {
+  return new URL(url).searchParams.get(searchParamName);
+};
+
+const ensureUrlTrailingSlash = url => {
+  return url.endsWith("/") ? url : `${url}/`;
+};
+
+const isFileSystemPath = value => {
+  if (typeof value !== "string") {
+    throw new TypeError(`isFileSystemPath first arg must be a string, got ${value}`);
+  }
+
+  if (value[0] === "/") return true;
+  return startsWithWindowsDriveLetter(value);
+};
+
+const startsWithWindowsDriveLetter = string => {
+  const firstChar = string[0];
+  if (!/[a-zA-Z]/.test(firstChar)) return false;
+  const secondChar = string[1];
+  if (secondChar !== ":") return false;
+  return true;
+};
+
+const fileSystemPathToUrl = value => {
+  if (!isFileSystemPath(value)) {
+    throw new Error(`received an invalid value for fileSystemPath: ${value}`);
+  }
+
+  return String(url$1.pathToFileURL(value));
+};
+
+const assertAndNormalizeDirectoryUrl = value => {
+  let urlString;
+
+  if (value instanceof URL) {
+    urlString = value.href;
+  } else if (typeof value === "string") {
+    if (isFileSystemPath(value)) {
+      urlString = fileSystemPathToUrl(value);
+    } else {
+      try {
+        urlString = String(new URL(value));
+      } catch (e) {
+        throw new TypeError(`directoryUrl must be a valid url, received ${value}`);
+      }
+    }
+  } else {
+    throw new TypeError(`directoryUrl must be a string or an url, received ${value}`);
+  }
+
+  if (!urlString.startsWith("file://")) {
+    throw new Error(`directoryUrl must starts with file://, received ${value}`);
+  }
+
+  return ensureUrlTrailingSlash(urlString);
+};
+
+const assertAndNormalizeFileUrl = (value, baseUrl) => {
+  let urlString;
+
+  if (value instanceof URL) {
+    urlString = value.href;
+  } else if (typeof value === "string") {
+    if (isFileSystemPath(value)) {
+      urlString = fileSystemPathToUrl(value);
+    } else {
+      try {
+        urlString = String(new URL(value, baseUrl));
+      } catch (e) {
+        throw new TypeError(`fileUrl must be a valid url, received ${value}`);
+      }
+    }
+  } else {
+    throw new TypeError(`fileUrl must be a string or an url, received ${value}`);
+  }
+
+  if (!urlString.startsWith("file://")) {
+    throw new Error(`fileUrl must starts with file://, received ${value}`);
+  }
+
+  return urlString;
+};
+
+const urlToFileSystemPath = fileUrl => {
+  if (fileUrl[fileUrl.length - 1] === "/") {
+    // remove trailing / so that nodejs path becomes predictable otherwise it logs
+    // the trailing slash on linux but does not on windows
+    fileUrl = fileUrl.slice(0, -1);
+  }
+
+  const fileSystemPath = url$1.fileURLToPath(fileUrl);
+  return fileSystemPath;
+};
+
+// https://github.com/coderaiser/cloudcmd/issues/63#issuecomment-195478143
+// https://nodejs.org/api/fs.html#fs_file_modes
+// https://github.com/TooTallNate/stat-mode
+// cannot get from fs.constants because they are not available on windows
+const S_IRUSR = 256;
+/* 0000400 read permission, owner */
+
+const S_IWUSR = 128;
+/* 0000200 write permission, owner */
+
+const S_IXUSR = 64;
+/* 0000100 execute/search permission, owner */
+
+const S_IRGRP = 32;
+/* 0000040 read permission, group */
+
+const S_IWGRP = 16;
+/* 0000020 write permission, group */
+
+const S_IXGRP = 8;
+/* 0000010 execute/search permission, group */
+
+const S_IROTH = 4;
+/* 0000004 read permission, others */
+
+const S_IWOTH = 2;
+/* 0000002 write permission, others */
+
+const S_IXOTH = 1;
+const permissionsToBinaryFlags = ({
+  owner,
+  group,
+  others
+}) => {
+  let binaryFlags = 0;
+  if (owner.read) binaryFlags |= S_IRUSR;
+  if (owner.write) binaryFlags |= S_IWUSR;
+  if (owner.execute) binaryFlags |= S_IXUSR;
+  if (group.read) binaryFlags |= S_IRGRP;
+  if (group.write) binaryFlags |= S_IWGRP;
+  if (group.execute) binaryFlags |= S_IXGRP;
+  if (others.read) binaryFlags |= S_IROTH;
+  if (others.write) binaryFlags |= S_IWOTH;
+  if (others.execute) binaryFlags |= S_IXOTH;
+  return binaryFlags;
+};
+
+const writeFileSystemNodePermissions = async (source, permissions) => {
+  const sourceUrl = assertAndNormalizeFileUrl(source);
+  const sourcePath = urlToFileSystemPath(sourceUrl);
+  let binaryFlags;
+
+  if (typeof permissions === "object") {
+    permissions = {
+      owner: {
+        read: getPermissionOrComputeDefault("read", "owner", permissions),
+        write: getPermissionOrComputeDefault("write", "owner", permissions),
+        execute: getPermissionOrComputeDefault("execute", "owner", permissions)
+      },
+      group: {
+        read: getPermissionOrComputeDefault("read", "group", permissions),
+        write: getPermissionOrComputeDefault("write", "group", permissions),
+        execute: getPermissionOrComputeDefault("execute", "group", permissions)
+      },
+      others: {
+        read: getPermissionOrComputeDefault("read", "others", permissions),
+        write: getPermissionOrComputeDefault("write", "others", permissions),
+        execute: getPermissionOrComputeDefault("execute", "others", permissions)
+      }
+    };
+    binaryFlags = permissionsToBinaryFlags(permissions);
+  } else {
+    binaryFlags = permissions;
+  }
+
+  return chmodNaive(sourcePath, binaryFlags);
+};
+
+const chmodNaive = (fileSystemPath, binaryFlags) => {
+  return new Promise((resolve, reject) => {
+    fs.chmod(fileSystemPath, binaryFlags, error => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+};
+
+const actionLevels = {
+  read: 0,
+  write: 1,
+  execute: 2
+};
+const subjectLevels = {
+  others: 0,
+  group: 1,
+  owner: 2
+};
+
+const getPermissionOrComputeDefault = (action, subject, permissions) => {
+  if (subject in permissions) {
+    const subjectPermissions = permissions[subject];
+
+    if (action in subjectPermissions) {
+      return subjectPermissions[action];
+    }
+
+    const actionLevel = actionLevels[action];
+    const actionFallback = Object.keys(actionLevels).find(actionFallbackCandidate => actionLevels[actionFallbackCandidate] > actionLevel && actionFallbackCandidate in subjectPermissions);
+
+    if (actionFallback) {
+      return subjectPermissions[actionFallback];
+    }
+  }
+
+  const subjectLevel = subjectLevels[subject]; // do we have a subject with a stronger level (group or owner)
+  // where we could read the action permission ?
+
+  const subjectFallback = Object.keys(subjectLevels).find(subjectFallbackCandidate => subjectLevels[subjectFallbackCandidate] > subjectLevel && subjectFallbackCandidate in permissions);
+
+  if (subjectFallback) {
+    const subjectPermissions = permissions[subjectFallback];
+    return action in subjectPermissions ? subjectPermissions[action] : getPermissionOrComputeDefault(action, subjectFallback, permissions);
+  }
+
+  return false;
+};
+
+const isWindows = process.platform === "win32";
+const readFileSystemNodeStat = async (source, {
+  nullIfNotFound = false,
+  followLink = true
+} = {}) => {
+  if (source.endsWith("/")) source = source.slice(0, -1);
+  const sourceUrl = assertAndNormalizeFileUrl(source);
+  const sourcePath = urlToFileSystemPath(sourceUrl);
+  const handleNotFoundOption = nullIfNotFound ? {
+    handleNotFoundError: () => null
+  } : {};
+  return readStat(sourcePath, {
+    followLink,
+    ...handleNotFoundOption,
+    ...(isWindows ? {
+      // Windows can EPERM on stat
+      handlePermissionDeniedError: async error => {
+        // unfortunately it means we mutate the permissions
+        // without being able to restore them to the previous value
+        // (because reading current permission would also throw)
+        try {
+          await writeFileSystemNodePermissions(sourceUrl, 0o666);
+          const stats = await readStat(sourcePath, {
+            followLink,
+            ...handleNotFoundOption,
+            // could not fix the permission error, give up and throw original error
+            handlePermissionDeniedError: () => {
+              throw error;
+            }
+          });
+          return stats;
+        } catch (e) {
+          // failed to write permission or readState, throw original error as well
+          throw error;
+        }
+      }
+    } : {})
+  });
+};
+
+const readStat = (sourcePath, {
+  followLink,
+  handleNotFoundError = null,
+  handlePermissionDeniedError = null
+} = {}) => {
+  const nodeMethod = followLink ? fs.stat : fs.lstat;
+  return new Promise((resolve, reject) => {
+    nodeMethod(sourcePath, (error, statsObject) => {
+      if (error) {
+        if (handlePermissionDeniedError && (error.code === "EPERM" || error.code === "EACCES")) {
+          resolve(handlePermissionDeniedError(error));
+        } else if (handleNotFoundError && error.code === "ENOENT") {
+          resolve(handleNotFoundError(error));
+        } else {
+          reject(error);
+        }
+      } else {
+        resolve(statsObject);
+      }
+    });
+  });
+};
+
+const ETAG_FOR_EMPTY_CONTENT = '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
+const bufferToEtag = buffer => {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new TypeError(`buffer expected, got ${buffer}`);
+  }
+
+  if (buffer.length === 0) {
+    return ETAG_FOR_EMPTY_CONTENT;
+  }
+
+  const hash = crypto.createHash("sha1");
+  hash.update(buffer, "utf8");
+  const hashBase64String = hash.digest("base64");
+  const hashBase64StringSubset = hashBase64String.slice(0, 27);
+  const length = buffer.length;
+  return `"${length.toString(16)}-${hashBase64StringSubset}"`;
+};
+
+const readDirectory = async (url, {
+  emfileMaxWait = 1000
+} = {}) => {
+  const directoryUrl = assertAndNormalizeDirectoryUrl(url);
+  const directoryPath = urlToFileSystemPath(directoryUrl);
+  const startMs = Date.now();
+  let attemptCount = 0;
+
+  const attempt = () => {
+    return readdirNaive(directoryPath, {
+      handleTooManyFilesOpenedError: async error => {
+        attemptCount++;
+        const nowMs = Date.now();
+        const timeSpentWaiting = nowMs - startMs;
+
+        if (timeSpentWaiting > emfileMaxWait) {
+          throw error;
+        }
+
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve(attempt());
+          }, attemptCount);
+        });
+      }
+    });
+  };
+
+  return attempt();
+};
+
+const readdirNaive = (directoryPath, {
+  handleTooManyFilesOpenedError = null
+} = {}) => {
+  return new Promise((resolve, reject) => {
+    fs.readdir(directoryPath, (error, names) => {
+      if (error) {
+        // https://nodejs.org/dist/latest-v13.x/docs/api/errors.html#errors_common_system_errors
+        if (handleTooManyFilesOpenedError && (error.code === "EMFILE" || error.code === "ENFILE")) {
+          resolve(handleTooManyFilesOpenedError(error));
+        } else {
+          reject(error);
+        }
+      } else {
+        resolve(names);
+      }
+    });
+  });
+};
+
+const isWindows$1 = process.platform === "win32";
+const baseUrlFallback = fileSystemPathToUrl(process.cwd());
+
+const isWindows$2 = process.platform === "win32";
+
+const readFilePromisified = util.promisify(fs.readFile);
+
+const {
+  readFile
+} = fs.promises;
+const serveFile = async (source, {
   method = "GET",
   headers = {},
   canReadDirectory = false,
@@ -992,17 +1326,15 @@ const serveFile = async (path, {
     };
   }
 
-  if (path.startsWith("file:///")) {
-    path = url$1.fileURLToPath(path);
-  }
+  const sourceUrl = assertAndNormalizeFileUrl(source);
 
   try {
     const cacheWithMtime = cacheStrategy === "mtime";
     const cacheWithETag = cacheStrategy === "etag";
     const cachedDisabled = cacheStrategy === "none";
-    const stat = await readFileStat(path);
+    const sourceStat = await readFileSystemNodeStat(sourceUrl);
 
-    if (stat.isDirectory()) {
+    if (sourceStat.isDirectory()) {
       if (canReadDirectory === false) {
         return {
           status: 403,
@@ -1014,60 +1346,36 @@ const serveFile = async (path, {
         };
       }
 
-      const files = await readDirectory(path);
-      const filesAsJSON = JSON.stringify(files);
+      const directoryContentArray = await readDirectory(sourceUrl);
+      const directoryContentJson = JSON.stringify(directoryContentArray);
       return {
         status: 200,
         headers: { ...(cachedDisabled ? {
             "cache-control": "no-store"
           } : {}),
           "content-type": "application/json",
-          "content-length": filesAsJSON.length
+          "content-length": directoryContentJson.length
         },
-        body: filesAsJSON
+        body: directoryContentJson
       };
-    }
+    } // not a file, give up
 
-    if (cacheWithMtime) {
-      if ("if-modified-since" in headers) {
-        let cachedModificationDate;
 
-        try {
-          cachedModificationDate = new Date(headers["if-modified-since"]);
-        } catch (e) {
-          return {
-            status: 400,
-            statusText: "if-modified-since header is not a valid date"
-          };
-        }
-
-        const actualModificationDate = dateToSecondsPrecision(stat.mtime);
-
-        if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
-          return {
-            status: 304
-          };
-        }
-      }
-
+    if (!sourceStat.isFile()) {
       return {
-        status: 200,
+        status: 404,
         headers: { ...(cachedDisabled ? {
             "cache-control": "no-store"
-          } : {}),
-          "last-modified": dateToUTCString(stat.mtime),
-          "content-length": stat.size,
-          "content-type": filenameToContentType(path, contentTypeMap)
-        },
-        body: fs.createReadStream(path)
+          } : {})
+        }
       };
     }
 
     if (cacheWithETag) {
-      const buffer = await readFileAsBuffer(path);
-      const eTag = bufferToEtag(buffer);
+      const fileContentAsBuffer = await readFile(urlToFileSystemPath(sourceUrl));
+      const fileContentEtag = bufferToEtag(fileContentAsBuffer);
 
-      if ("if-none-match" in headers && headers["if-none-match"] === eTag) {
+      if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
         return {
           status: 304,
           headers: { ...(cachedDisabled ? {
@@ -1082,22 +1390,47 @@ const serveFile = async (path, {
         headers: { ...(cachedDisabled ? {
             "cache-control": "no-store"
           } : {}),
-          "content-length": stat.size,
-          "content-type": filenameToContentType(path, contentTypeMap),
-          etag: eTag
+          "content-length": sourceStat.size,
+          "content-type": urlToContentType(sourceUrl, contentTypeMap),
+          "etag": fileContentEtag
         },
-        body: buffer
+        body: fileContentAsBuffer
       };
+    }
+
+    if (cacheWithMtime && "if-modified-since" in headers) {
+      let cachedModificationDate;
+
+      try {
+        cachedModificationDate = new Date(headers["if-modified-since"]);
+      } catch (e) {
+        return {
+          status: 400,
+          statusText: "if-modified-since header is not a valid date"
+        };
+      }
+
+      const actualModificationDate = dateToSecondsPrecision(sourceStat.mtime);
+
+      if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
+        return {
+          status: 304
+        };
+      }
     }
 
     return {
       status: 200,
-      headers: {
-        "cache-control": "no-store",
-        "content-length": stat.size,
-        "content-type": filenameToContentType(path, contentTypeMap)
+      headers: { ...(cachedDisabled ? {
+          "cache-control": "no-store"
+        } : {}),
+        ...(cacheWithMtime ? {
+          "last-modified": dateToUTCString(sourceStat.mtime)
+        } : {}),
+        "content-length": sourceStat.size,
+        "content-type": urlToContentType(sourceUrl, contentTypeMap)
       },
-      body: fs.createReadStream(path)
+      body: fs.createReadStream(urlToFileSystemPath(sourceUrl))
     };
   } catch (e) {
     return convertFileSystemErrorToResponseProperties(e);
@@ -1112,28 +1445,10 @@ const dateToSecondsPrecision = date => {
   return dateWithSecondsPrecision;
 };
 
-const readFileAsBuffer = path => new Promise((resolve, reject) => {
-  fs.readFile(path, (error, buffer) => {
-    if (error) reject(error);else resolve(buffer);
-  });
-});
-
-const readFileStat = path => new Promise((resolve, reject) => {
-  fs.stat(path, (error, stats) => {
-    if (error) reject(error);else resolve(stats);
-  });
-});
-
-const readDirectory = path => new Promise((resolve, reject) => {
-  fs.readdir(path, (error, value) => {
-    if (error) reject(error);else resolve(value);
-  });
-});
-
 // eslint-disable-next-line import/no-unresolved
 const nodeRequire = require;
 const filenameContainsBackSlashes = __filename.indexOf("\\") > -1;
-const url = filenameContainsBackSlashes ? `file://${__filename.replace(/\\/g, "/")}` : `file://${__filename}`;
+const url = filenameContainsBackSlashes ? `file:///${__filename.replace(/\\/g, "/")}` : `file://${__filename}`;
 
 let beforeExitCallbackArray = [];
 let uninstall;
@@ -1851,12 +2166,16 @@ const STOP_REASON_PROCESS_DEATH = createReason("process death");
 const STOP_REASON_PROCESS_EXIT = createReason("process exit");
 const STOP_REASON_NOT_SPECIFIED = createReason("not specified");
 
-const killPort = nodeRequire("kill-port");
+const require$1 = module$1.createRequire(url);
+
+const killPort = require$1("kill-port");
 
 const STATUS_TEXT_INTERNAL_ERROR = "internal error";
 const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
+  logStart = true,
+  logStop = true,
   protocol = "http",
   ip = "127.0.0.1",
   port = 0,
@@ -1965,7 +2284,11 @@ const startServer = async ({
   });
   const stop = memoizeOnce$1(async (reason = STOP_REASON_NOT_SPECIFIED) => {
     status = "closing";
-    logger.info(`server stopped because ${reason}`);
+
+    if (logStop) {
+      logger.info(`server stopped because ${reason}`);
+    }
+
     await cleanup(reason);
     await stopListening(nodeServer);
     status = "stopped";
@@ -2027,7 +2350,11 @@ const startServer = async ({
     ip,
     port
   });
-  logger.info(`server started at ${origin}`);
+
+  if (logStart) {
+    logger.info(`server started at ${origin}`);
+  }
+
   startedCallback({
     origin
   }); // nodeServer.on("upgrade", (request, socket, head) => {
@@ -2127,7 +2454,7 @@ const startServer = async ({
       const responseProperties = await requestToResponse(request);
       return {
         request,
-        response: responsePropertiesToResponse(responseProperties)
+        response: responsePropertiesToResponse(responseProperties || {})
       };
     } catch (error) {
       return {
@@ -2313,6 +2640,7 @@ exports.STOP_REASON_PROCESS_HANGUP_OR_DEATH = STOP_REASON_PROCESS_HANGUP_OR_DEAT
 exports.STOP_REASON_PROCESS_SIGINT = STOP_REASON_PROCESS_SIGINT;
 exports.acceptsContentType = acceptsContentType;
 exports.composeResponse = composeResponse;
+exports.convertFileSystemErrorToResponseProperties = convertFileSystemErrorToResponseProperties;
 exports.createSSERoom = createSSERoom;
 exports.findFreePort = findFreePort;
 exports.firstService = firstService;
@@ -2321,7 +2649,8 @@ exports.jsenvAccessControlAllowedMethods = jsenvAccessControlAllowedMethods;
 exports.jsenvCertificate = jsenvCertificate;
 exports.jsenvPrivateKey = jsenvPrivateKey;
 exports.jsenvPublicKey = jsenvPublicKey;
-exports.ressourceToSearchParamValue = ressourceToSearchParamValue;
 exports.serveFile = serveFile;
 exports.startServer = startServer;
+exports.urlToContentType = urlToContentType;
+exports.urlToSearchParamValue = urlToSearchParamValue;
 //# sourceMappingURL=main.js.map
