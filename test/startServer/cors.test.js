@@ -28,7 +28,7 @@ const server = await startServer({
 const response = await fetch(server.origin, {
   method: "OPTIONS",
   headers: {
-    origin: "http://example.com:80",
+    "origin": "http://example.com:80",
     "access-control-request-method": "GET",
     "access-control-request-headers": "x-whatever",
   },
@@ -43,9 +43,9 @@ const expected = {
   "access-control-allow-methods": "GET",
   "access-control-allow-origin": "http://example.com:80",
   "access-control-max-age": "400",
-  connection: "close",
+  "connection": "close",
   "content-length": "0",
-  date: response.headers.get("date"),
-  vary: "origin, access-control-request-method, access-control-request-headers",
+  "date": response.headers.get("date"),
+  "vary": "origin, access-control-request-method, access-control-request-headers",
 }
 assert({ actual, expected })

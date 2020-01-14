@@ -107,7 +107,7 @@ export const serveFile = async (
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
           "content-length": stat.size,
           "content-type": urlToContentType(fileUrl, contentTypeMap),
-          etag: eTag,
+          "etag": eTag,
         },
         body: buffer,
       }

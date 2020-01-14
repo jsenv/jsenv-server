@@ -16,7 +16,7 @@ const expected = {
   headers: {
     "content-length": bodyAsBuffer.length,
     "content-type": "application/javascript",
-    etag: `"20-cXagzQt5IlWM1Fc0XXcmMtPeNKo"`,
+    "etag": `"20-cXagzQt5IlWM1Fc0XXcmMtPeNKo"`,
   },
   body: bodyAsBuffer,
 }

@@ -83,7 +83,7 @@ export const createSSERoom = ({
       headers: {
         "content-type": "text/event-stream",
         "cache-control": "no-cache",
-        connection: "keep-alive",
+        "connection": "keep-alive",
       },
       body,
     }
