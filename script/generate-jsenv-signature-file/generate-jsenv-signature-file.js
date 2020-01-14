@@ -1,26 +1,28 @@
-const { writeFileSync } = require("fs")
-const { pathToFileURL, fileURLToPath } = require("url")
-const { createSelfSignature } = require("./createSelfSignature.js")
+import { resolveUrl, writeFile, urlToFileSystemPath } from "@jsenv/util"
+import { createSelfSignature } from "./createSelfSignature.js"
 
-const { publicKeyPem, privateKeyPem, certificatePem } = createSelfSignature()
+const generateJsenvSignatureFile = async () => {
+  const projectDirectoryUrl = resolveUrl("../../", import.meta.url)
 
-const jsenvServerDirectoryUrl = new URL("../../", pathToFileURL(__filename))
-const signatureFileUrl = new URL("./src/jsenvSignature.js", jsenvServerDirectoryUrl)
-const signatureFilePath = fileURLToPath(signatureFileUrl)
+  const signatureFileUrl = resolveUrl("./src/jsenvSignature.js", projectDirectoryUrl)
+  const { publicKeyPem, privateKeyPem, certificatePem } = createSelfSignature()
 
-const pemToJavaScriptValue = (pem) => {
-  pem = pem.replace(/\r\n/g, "\n")
-  pem = pem.trim()
-  return `\`${pem}\``
+  const pemToJavaScriptValue = (pem) => {
+    pem = pem.replace(/\r\n/g, "\n")
+    pem = pem.trim()
+    return `\`${pem}\``
+  }
+
+  await writeFile(
+    signatureFileUrl,
+    `export const jsenvPrivateKey = ${pemToJavaScriptValue(privateKeyPem)}
+
+  export const jsenvPublicKey = ${pemToJavaScriptValue(publicKeyPem)}
+
+  export const jsenvCertificate = ${pemToJavaScriptValue(certificatePem)}
+  `,
+  )
+  console.log(`-> ${urlToFileSystemPath(signatureFileUrl)}`)
 }
 
-writeFileSync(
-  signatureFilePath,
-  `export const jsenvPrivateKey = ${pemToJavaScriptValue(privateKeyPem)}
-
-export const jsenvPublicKey = ${pemToJavaScriptValue(publicKeyPem)}
-
-export const jsenvCertificate = ${pemToJavaScriptValue(certificatePem)}
-`,
-)
-console.log(`-> ${signatureFilePath}`)
+generateJsenvSignatureFile()
