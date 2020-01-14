@@ -4,6 +4,9 @@ import { fetch } from "../testHelpers.js"
 
 const { origin, stop } = await startServer({
   logLevel: "off",
+  protocol: "http",
+  ip: "",
+  port: 8998,
   requestToResponse: () => {
     return {
       status: 200,
@@ -23,7 +26,7 @@ const { origin, stop } = await startServer({
 {
   const actual = await fetch(origin)
   const expected = {
-    url: `${origin}/`,
+    url: `http://127.0.0.1:8998/`,
     status: 200,
     headers: {
       "connection": "close",
