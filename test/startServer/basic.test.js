@@ -37,4 +37,3 @@ const { origin, stop } = await startServer({
 }
 
 stop()
-cancel("done")
