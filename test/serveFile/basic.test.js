@@ -1,6 +1,6 @@
 import { fileURLToPath } from "url"
 import { readFileSync } from "fs"
-import { assert } from "@dmail/assert"
+import { assert } from "@jsenv/assert"
 import { serveFile } from "../../index.js"
 
 const testDirectoryUrl = new URL("./", import.meta.url)

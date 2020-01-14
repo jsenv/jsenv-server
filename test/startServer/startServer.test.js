@@ -1,5 +1,5 @@
 import { createCancellationSource } from "@jsenv/cancellation"
-import { assert } from "@dmail/assert"
+import { assert } from "@jsenv/assert"
 import { startServer } from "../../index.js"
 
 const fetch = import.meta.require("node-fetch")
