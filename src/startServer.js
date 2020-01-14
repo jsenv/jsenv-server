@@ -306,7 +306,7 @@ export const startServer = async ({
       const responseProperties = await requestToResponse(request)
       return {
         request,
-        response: responsePropertiesToResponse(responseProperties),
+        response: responsePropertiesToResponse(responseProperties || {}),
       }
     } catch (error) {
       return {
