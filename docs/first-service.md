@@ -5,7 +5,8 @@
 
 # firstService specifications
 
-`firstService` helps you to create complex `requestToResponse` parameter used by `startServer`.<br />
+`firstService` helps you to create complex `requestToResponse` parameter used by `startServer`.
+
 — see [startServer#requestToResponse](./start-server.md#requestToResponse)
 
 It works like this:
@@ -18,9 +19,7 @@ It works like this:
 
 # firstService example
 
-> `firstService` is a function returning the first response produced by other functions.
-
-Implemented in [src/firstService.js](../src/firstService.js), you can use it as shown below.
+`firstService` is a function returning the first response produced by other functions.
 
 ```js
 import { firstService } from "@jsenv/server"
@@ -43,3 +42,5 @@ const requestToResponse = (request) => {
 
 - returns `204 no content` response for `/`
 - returns `200 ok` response for `/whatever`
+
+— source code at [src/firstService.js](../src/firstService.js).

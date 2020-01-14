@@ -1,9 +1,12 @@
 // https://github.com/digitalbazaar/forge/blob/master/examples/create-cert.js
 // https://github.com/digitalbazaar/forge/issues/660#issuecomment-467145103
 
+import { createRequire } from "module"
+
+const require = createRequire(import.meta.url)
 const forge = require("node-forge")
 
-const createSelfSignature = () => {
+export const createSelfSignature = () => {
   const { pki, sha256 } = forge
 
   const certificate = pki.createCertificate()
@@ -81,8 +84,6 @@ const createSelfSignature = () => {
     certificatePem: pki.certificateToPem(certificate),
   }
 }
-
-exports.createSelfSignature = createSelfSignature
 
 const generateNotValideBeforeDate = () => {
   const date = new Date(Date.now() - 1000)

@@ -1,4 +1,4 @@
-import { assert } from "@dmail/assert"
+import { assert } from "@jsenv/assert"
 import { findFreePort } from "../../index.js"
 
 const port = await findFreePort()

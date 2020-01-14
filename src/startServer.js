@@ -1,6 +1,7 @@
 /* eslint-disable import/max-dependencies */
 import { createServer as createNodeServer, STATUS_CODES } from "http"
 import { createServer as createNodeSecureServer, Agent as SecureAgent } from "https"
+import { createRequire } from "module"
 import {
   createCancellationToken,
   createOperation,
@@ -33,7 +34,8 @@ import { jsenvAccessControlAllowedHeaders } from "./jsenvAccessControlAllowedHea
 import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMethods.js"
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 
-const killPort = import.meta.require("kill-port")
+const require = createRequire(import.meta.url)
+const killPort = require("kill-port")
 
 const STATUS_TEXT_INTERNAL_ERROR = "internal error"
 
@@ -304,7 +306,7 @@ export const startServer = async ({
       const responseProperties = await requestToResponse(request)
       return {
         request,
-        response: responsePropertiesToResponse(responseProperties),
+        response: responsePropertiesToResponse(responseProperties || {}),
       }
     } catch (error) {
       return {

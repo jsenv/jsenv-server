@@ -1,23 +1,22 @@
-import { fileURLToPath } from "url"
-import { readFileSync } from "fs"
-import { assert } from "@dmail/assert"
+import { resolveUrl, readFile } from "@jsenv/util"
+import { assert } from "@jsenv/assert"
 import { serveFile } from "../../index.js"
 
-const testDirectoryUrl = new URL("./", import.meta.url)
-const fileUrl = new URL("./file.js?ok=true", testDirectoryUrl)
-const filePath = fileURLToPath(fileUrl)
+const isWindows = process.platform === "win32"
+const testDirectoryUrl = resolveUrl("./", import.meta.url)
+const sourceUrl = resolveUrl("./file.js?ok=true", testDirectoryUrl)
 
-const actual = await serveFile(filePath, {
+const actual = await serveFile(sourceUrl, {
   cacheStrategy: "etag",
 })
-const bodyAsBuffer = readFileSync(filePath)
+const sourceBuffer = Buffer.from(await readFile(sourceUrl))
 const expected = {
   status: 200,
   headers: {
-    "content-length": bodyAsBuffer.length,
+    "content-length": sourceBuffer.length,
     "content-type": "application/javascript",
-    etag: `"20-cXagzQt5IlWM1Fc0XXcmMtPeNKo"`,
+    "etag": isWindows ? `"21-e74mfbSm2jDnInr5kHyIm6jWsXI"` : `"20-cXagzQt5IlWM1Fc0XXcmMtPeNKo"`,
   },
-  body: bodyAsBuffer,
+  body: sourceBuffer,
 }
 assert({ actual, expected })
