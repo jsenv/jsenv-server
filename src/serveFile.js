@@ -1,12 +1,18 @@
-import { fileURLToPath, pathToFileURL } from "url"
-import { createReadStream, readFile, readdir, stat } from "fs"
-import { bufferToEtag } from "./internal/bufferToEtag.js"
+import { createReadStream } from "fs"
+import {
+  bufferToEtag,
+  assertAndNormalizeFileUrl,
+  readFileSystemNodeStat,
+  readDirectory,
+  readFile,
+  urlToFileSystemPath,
+} from "@jsenv/util"
 import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemErrorToResponseProperties.js"
 import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
 
 export const serveFile = async (
-  path,
+  source,
   {
     method = "GET",
     headers = {},
@@ -21,17 +27,16 @@ export const serveFile = async (
     }
   }
 
-  const fileUrl = path.startsWith("file:///") ? path : pathToFileURL(path)
-  const filePath = fileURLToPath(fileUrl)
+  const sourceUrl = assertAndNormalizeFileUrl(source)
 
   try {
     const cacheWithMtime = cacheStrategy === "mtime"
     const cacheWithETag = cacheStrategy === "etag"
     const cachedDisabled = cacheStrategy === "none"
 
-    const stat = await readFileStat(filePath)
+    const sourceStat = await readFileSystemNodeStat(sourceUrl)
 
-    if (stat.isDirectory()) {
+    if (sourceStat.isDirectory()) {
       if (canReadDirectory === false) {
         return {
           status: 403,
@@ -42,57 +47,36 @@ export const serveFile = async (
         }
       }
 
-      const files = await readDirectory(filePath)
-      const filesAsJSON = JSON.stringify(files)
+      const directoryContentArray = await readDirectory(sourceUrl)
+      const directoryContentJson = JSON.stringify(directoryContentArray)
 
       return {
         status: 200,
         headers: {
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
           "content-type": "application/json",
-          "content-length": filesAsJSON.length,
+          "content-length": directoryContentJson.length,
         },
-        body: filesAsJSON,
+        body: directoryContentJson,
       }
     }
 
-    if (cacheWithMtime) {
-      if ("if-modified-since" in headers) {
-        let cachedModificationDate
-        try {
-          cachedModificationDate = new Date(headers["if-modified-since"])
-        } catch (e) {
-          return {
-            status: 400,
-            statusText: "if-modified-since header is not a valid date",
-          }
-        }
-
-        const actualModificationDate = dateToSecondsPrecision(stat.mtime)
-        if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
-          return {
-            status: 304,
-          }
-        }
-      }
-
+    // not a file, give up
+    if (!sourceStat.isFile()) {
       return {
-        status: 200,
+        status: 404,
         headers: {
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-          "last-modified": dateToUTCString(stat.mtime),
-          "content-length": stat.size,
-          "content-type": urlToContentType(fileUrl, contentTypeMap),
         },
-        body: createReadStream(filePath),
       }
     }
 
     if (cacheWithETag) {
-      const buffer = await readFileAsBuffer(filePath)
-      const eTag = bufferToEtag(buffer)
+      const fileContentAsString = await readFile(sourceUrl)
+      const fileContentAsBuffer = Buffer.from(fileContentAsString)
+      const fileContentEtag = bufferToEtag(fileContentAsBuffer)
 
-      if ("if-none-match" in headers && headers["if-none-match"] === eTag) {
+      if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
         return {
           status: 304,
           headers: {
@@ -105,22 +89,42 @@ export const serveFile = async (
         status: 200,
         headers: {
           ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-          "content-length": stat.size,
-          "content-type": urlToContentType(fileUrl, contentTypeMap),
-          "etag": eTag,
+          "content-length": sourceStat.size,
+          "content-type": urlToContentType(sourceUrl, contentTypeMap),
+          "etag": fileContentEtag,
         },
-        body: buffer,
+        body: fileContentAsBuffer,
+      }
+    }
+
+    if (cacheWithMtime && "if-modified-since" in headers) {
+      let cachedModificationDate
+      try {
+        cachedModificationDate = new Date(headers["if-modified-since"])
+      } catch (e) {
+        return {
+          status: 400,
+          statusText: "if-modified-since header is not a valid date",
+        }
+      }
+
+      const actualModificationDate = dateToSecondsPrecision(sourceStat.mtime)
+      if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
+        return {
+          status: 304,
+        }
       }
     }
 
     return {
       status: 200,
       headers: {
-        "cache-control": "no-store",
-        "content-length": stat.size,
-        "content-type": urlToContentType(fileUrl, contentTypeMap),
+        ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
+        ...(cacheWithMtime ? { "last-modified": dateToUTCString(sourceStat.mtime) } : {}),
+        "content-length": sourceStat.size,
+        "content-type": urlToContentType(sourceUrl, contentTypeMap),
       },
-      body: createReadStream(filePath),
+      body: createReadStream(urlToFileSystemPath(sourceUrl)),
     }
   } catch (e) {
     return convertFileSystemErrorToResponseProperties(e)
@@ -135,27 +139,3 @@ const dateToSecondsPrecision = (date) => {
   dateWithSecondsPrecision.setMilliseconds(0)
   return dateWithSecondsPrecision
 }
-
-const readFileAsBuffer = (path) =>
-  new Promise((resolve, reject) => {
-    readFile(path, (error, buffer) => {
-      if (error) reject(error)
-      else resolve(buffer)
-    })
-  })
-
-const readFileStat = (path) =>
-  new Promise((resolve, reject) => {
-    stat(path, (error, stats) => {
-      if (error) reject(error)
-      else resolve(stats)
-    })
-  })
-
-const readDirectory = (path) =>
-  new Promise((resolve, reject) => {
-    readdir(path, (error, value) => {
-      if (error) reject(error)
-      else resolve(value)
-    })
-  })

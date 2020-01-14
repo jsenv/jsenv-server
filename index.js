@@ -1,3 +1,14 @@
+/**
+ * TODO:
+ *
+ * tester plus de cas
+ * utiliser @jsenv/util quand c'est possible
+ * utiliser @jsenv/util voir meme faire du mjs pour generate jsenv signature
+ * (node 13.6 devrait pouvoir run le fichier)
+ *
+ *
+ */
+
 export { acceptsContentType } from "./src/acceptsContentType.js"
 export { composeResponse } from "./src/composeResponse.js"
 export { convertFileSystemErrorToResponseProperties } from "./src/convertFileSystemErrorToResponseProperties.js"
