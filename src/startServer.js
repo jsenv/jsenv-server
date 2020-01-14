@@ -33,7 +33,7 @@ import { jsenvAccessControlAllowedHeaders } from "./jsenvAccessControlAllowedHea
 import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMethods.js"
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 
-const killPort = import.meta.require("kill-port")
+const killPort = (require || import.meta.require)("kill-port")
 
 const STATUS_TEXT_INTERNAL_ERROR = "internal error"
 
