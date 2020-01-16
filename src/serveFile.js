@@ -6,6 +6,7 @@ import {
   readDirectory,
   urlToFileSystemPath,
 } from "@jsenv/util"
+import { createCancellationToken, createOperation } from "@jsenv/cancellation"
 import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemErrorToResponseProperties.js"
 import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
@@ -15,6 +16,7 @@ const { readFile } = promises
 export const serveFile = async (
   source,
   {
+    cancellationToken = createCancellationToken(),
     method = "GET",
     headers = {},
     canReadDirectory = false,
@@ -29,13 +31,17 @@ export const serveFile = async (
   }
 
   const sourceUrl = assertAndNormalizeFileUrl(source)
+  const clientCacheDisabled = headers["cache-control"] === "no-cache"
 
   try {
-    const cacheWithMtime = cacheStrategy === "mtime"
-    const cacheWithETag = cacheStrategy === "etag"
-    const cachedDisabled = cacheStrategy === "none"
+    const cacheWithMtime = !clientCacheDisabled && cacheStrategy === "mtime"
+    const cacheWithETag = !clientCacheDisabled && cacheStrategy === "etag"
+    const cachedDisabled = clientCacheDisabled || cacheStrategy === "none"
 
-    const sourceStat = await readFileSystemNodeStat(sourceUrl)
+    const sourceStat = await createOperation({
+      cancellationToken,
+      start: () => readFileSystemNodeStat(sourceUrl),
+    })
 
     if (sourceStat.isDirectory()) {
       if (canReadDirectory === false) {
@@ -48,7 +54,10 @@ export const serveFile = async (
         }
       }
 
-      const directoryContentArray = await readDirectory(sourceUrl)
+      const directoryContentArray = await createOperation({
+        cancellationToken,
+        start: () => readDirectory(sourceUrl),
+      })
       const directoryContentJson = JSON.stringify(directoryContentArray)
 
       return {
@@ -73,7 +82,10 @@ export const serveFile = async (
     }
 
     if (cacheWithETag) {
-      const fileContentAsBuffer = await readFile(urlToFileSystemPath(sourceUrl))
+      const fileContentAsBuffer = await createOperation({
+        cancellationToken,
+        start: () => readFile(urlToFileSystemPath(sourceUrl)),
+      })
       const fileContentEtag = bufferToEtag(fileContentAsBuffer)
 
       if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
