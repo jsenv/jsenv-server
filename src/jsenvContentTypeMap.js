@@ -1,6 +1,6 @@
 export const jsenvContentTypeMap = {
   "application/javascript": {
-    extensions: ["js", "mjs", "ts", "jsx"],
+    extensions: ["js", "cjs", "mjs", "ts", "jsx"],
   },
   "application/json": {
     extensions: ["json"],
