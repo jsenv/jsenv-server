@@ -12,7 +12,7 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   const fileContent = "hello world"
   await writeFile(url, fileContent)
 
-  const actual = await fetchUrl(url, { headers: { "cache-control": "no-cache" } })
+  const actual = await fetchUrl(url, { simplified: true, headers: { "cache-control": "no-cache" } })
   const expected = {
     url,
     status: 200,
@@ -32,7 +32,7 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   await ensureEmptyDirectory(tempDirectoryUrl)
   const url = resolveUrl("file.txt", tempDirectoryUrl)
 
-  const actual = await fetchUrl(url, { headers: { "cache-control": "no-cache" } })
+  const actual = await fetchUrl(url, { simplified: true, headers: { "cache-control": "no-cache" } })
   const expected = {
     url,
     status: 404,
@@ -64,7 +64,7 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   })
   const url = server.origin
 
-  const actual = await fetchUrl(url, { method: "POST" })
+  const actual = await fetchUrl(url, { simplified: true, method: "POST" })
   const expected = {
     url: `${url}/`,
     status: 201,

@@ -14,7 +14,7 @@ export const fetchUrl = async (
   url,
   {
     cancellationToken = createCancellationToken(),
-    standard = false,
+    simplified = false,
     canReadDirectory,
     contentTypeMap,
     cacheStrategy,
@@ -41,7 +41,7 @@ export const fetchUrl = async (
       statusText,
       headers,
     })
-    return standard ? response : standardResponseToSimplifiedResponse(response)
+    return simplified ? standardResponseToSimplifiedResponse(response) : response
   }
 
   const response = await createOperation({
@@ -52,7 +52,7 @@ export const fetchUrl = async (
         ...options,
       }),
   })
-  return standard ? response : standardResponseToSimplifiedResponse(response)
+  return simplified ? standardResponseToSimplifiedResponse(response) : response
 }
 
 // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
