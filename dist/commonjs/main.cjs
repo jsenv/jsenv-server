@@ -2,15 +2,15 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
-var net = require('net');
-var path = require('path');
+var module$1 = require('module');
 var fs = require('fs');
 var url$1 = require('url');
 var crypto = require('crypto');
+var path = require('path');
 var util = require('util');
+var net = require('net');
 var http = require('http');
 var https = require('https');
-var module$1 = require('module');
 var stream = require('stream');
 
 const acceptsContentType = (acceptHeader, contentType) => {
@@ -528,6 +528,11 @@ const createEventHistory = ({
   };
 };
 
+// eslint-disable-next-line import/no-unresolved
+const nodeRequire = require;
+const filenameContainsBackSlashes = __filename.indexOf("\\") > -1;
+const url = filenameContainsBackSlashes ? `file:///${__filename.replace(/\\/g, "/")}` : `file://${__filename}`;
+
 const createCancellationToken = () => {
   const register = callback => {
     if (typeof callback !== "function") {
@@ -682,272 +687,6 @@ const firstOperationMatching = ({
 
     visit(0);
   });
-};
-
-const listen = ({
-  cancellationToken,
-  server,
-  port,
-  ip
-}) => {
-  return createStoppableOperation({
-    cancellationToken,
-    start: () => startListening(server, port, ip),
-    stop: () => stopListening(server)
-  });
-};
-const startListening = (server, port, ip) => new Promise((resolve, reject) => {
-  server.on("error", reject);
-  server.on("listening", () => {
-    // in case port is 0 (randomly assign an available port)
-    // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
-    resolve(server.address().port);
-  });
-  server.listen(port, ip);
-});
-const stopListening = server => new Promise((resolve, reject) => {
-  server.on("error", reject);
-  server.on("close", resolve);
-  server.close();
-});
-
-const findFreePort = async (initialPort = 1, {
-  cancellationToken = createCancellationToken(),
-  ip = "127.0.0.1",
-  min = 1,
-  max = 65534,
-  next = port => port + 1
-} = {}) => {
-  const testUntil = async (port, ip) => {
-    const free = await portIsFree({
-      cancellationToken,
-      port,
-      ip
-    });
-
-    if (free) {
-      return port;
-    }
-
-    const nextPort = next(port);
-
-    if (nextPort > max) {
-      throw new Error(`${ip} has no available port between ${min} and ${max}`);
-    }
-
-    return testUntil(nextPort, ip);
-  };
-
-  return testUntil(initialPort, ip);
-};
-
-const portIsFree = async ({
-  cancellationToken,
-  port,
-  ip
-}) => {
-  const server = net.createServer();
-  const listenOperation = listen({
-    cancellationToken,
-    server,
-    port,
-    ip
-  });
-  return listenOperation.then(() => {
-    const stopPromise = listenOperation.stop(); // cancellation must wait for server to be closed before considering
-    // cancellation as done
-
-    cancellationToken.register(() => stopPromise);
-    return stopPromise.then(() => true);
-  }, error => {
-    if (error && error.code === "EADDRINUSE") {
-      return false;
-    }
-
-    if (error && error.code === "EACCES") {
-      return false;
-    }
-
-    return Promise.reject(error);
-  });
-};
-
-const firstService = (...callbacks) => {
-  return firstOperationMatching({
-    array: callbacks,
-    start: callback => callback(),
-    predicate: serviceGeneratedResponsePredicate
-  });
-};
-
-const serviceGeneratedResponsePredicate = value => {
-  if (value === null) {
-    return false;
-  }
-
-  return typeof value === "object";
-};
-
-const jsenvAccessControlAllowedHeaders = ["x-requested-with"];
-
-const jsenvAccessControlAllowedMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"];
-
-const jsenvPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQCll1gJkJqB+KRZsyepQ7gs81UO+73aKPaNbjp/dwo9XfqvNdDp
-Ki4zfTwzzJyFXkoN+NGihfQHI+VqRGITc+XzmBPcGu9XIvYy52lV3zjG4sldz+r8
-iNBzFwFSdUGmaHfkcm0YhvcjdRhyKalDaLMc3pVX4dq9rRzqm+pkbzVfVQIDAQAB
-AoGAImSo2HO8Y7ptCGR5nGKAYnW3+QC4khNoAkAezlK/Qbe/VZzr40Hrjq44Ttn0
-uI64+uXvRL5lzQXbpJLHfBraa8J6Vstf2Kwadmg+FyrqBcet6gidqZ6S1LBTfXII
-eSUcMIqkourv7LWOs8BfWQQiCf0Em0shGK1qf1lgiOQxoJECQQD+dSJOPqKbdZfJ
-/JcsInf5dPkfTNZMhBxpxqiYOvU3684W3LHB1g6BXjHmIF/CIrxcAHsxxXwTGWu9
-23Ffu+xPAkEApphOt+CzGdYq+Ygjj6Hq+hx3hkUwKUHSEOcNXG0Eb90m2sCEkXgz
-xH7fKYXaohFtis7IFJR4UfYD8pkGYVmdGwJAJf/iFqM9709ZUp25CatAFW3Fgkoc
-OqMEBzvWk51CX46EYV+l4BeSZPlnJEGzay96x5Z+z0j5pXSHZXvu62gJ+wJACci+
-LsxymFzcr0UQmZnv2/qaBne/yVyFQtrfDQOWFB/P7V8LKiP+Hlc5Mg4bdhNB9LoK
-RDMoEeA6ASB9oHAL6wJBAJcYLOICBVQrTil6DroEkrIxQY/S+arKc42uFpj98S+w
-k3doJf8KKDrclaRnKfMXxGYhXPUWFpa5fFr1hvcprEo=
------END RSA PRIVATE KEY-----`;
-const jsenvPublicKey = `-----BEGIN PUBLIC KEY-----
-MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCll1gJkJqB+KRZsyepQ7gs81UO
-+73aKPaNbjp/dwo9XfqvNdDpKi4zfTwzzJyFXkoN+NGihfQHI+VqRGITc+XzmBPc
-Gu9XIvYy52lV3zjG4sldz+r8iNBzFwFSdUGmaHfkcm0YhvcjdRhyKalDaLMc3pVX
-4dq9rRzqm+pkbzVfVQIDAQAB
------END PUBLIC KEY-----`;
-const jsenvCertificate = `-----BEGIN CERTIFICATE-----
-MIIDEDCCAnmgAwIBAgIQd9Gto4GPGwXcLk0flq7bsjANBgkqhkiG9w0BAQsFADCB
-kTEuMCwGA1UEAxMlaHR0cHM6Ly9naXRodWIuY29tL2pzZW52L2pzZW52LXNlcnZl
-cjELMAkGA1UEBhMCRlIxGDAWBgNVBAgTD0FscGVzIE1hcml0aW1lczERMA8GA1UE
-BxMIVmFsYm9ubmUxDjAMBgNVBAoTBWpzZW52MRUwEwYDVQQLEwxqc2VudiBzZXJ2
-ZXIwHhcNMTkwNzA5MTQ1MzU4WhcNMjgwNzA5MTQ1MzU5WjCBkTEuMCwGA1UEAxMl
-aHR0cHM6Ly9naXRodWIuY29tL2pzZW52L2pzZW52LXNlcnZlcjELMAkGA1UEBhMC
-RlIxGDAWBgNVBAgTD0FscGVzIE1hcml0aW1lczERMA8GA1UEBxMIVmFsYm9ubmUx
-DjAMBgNVBAoTBWpzZW52MRUwEwYDVQQLEwxqc2VudiBzZXJ2ZXIwgZ8wDQYJKoZI
-hvcNAQEBBQADgY0AMIGJAoGBAKWXWAmQmoH4pFmzJ6lDuCzzVQ77vdoo9o1uOn93
-Cj1d+q810OkqLjN9PDPMnIVeSg340aKF9Acj5WpEYhNz5fOYE9wa71ci9jLnaVXf
-OMbiyV3P6vyI0HMXAVJ1QaZod+RybRiG9yN1GHIpqUNosxzelVfh2r2tHOqb6mRv
-NV9VAgMBAAGjZzBlMAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1Ud
-JQQMMAoGCCsGAQUFBwMBMB8GA1UdIwQYMBaAFOQhJA9S7idbpNIbvKMyeRWbwyad
-MA8GA1UdEQQIMAaHBH8AAAEwDQYJKoZIhvcNAQELBQADgYEAUKPupneUl1bdjbbf
-QvUqAExIK0Nv2u54X8l0EJvkdPMNQEer7Npzg5RQWExtvamfEZI1EPOeVfPVu5sz
-q4DB6OgAEzkytbKtcgPlhY0GDbim8ELCpO1JNDn/jUXH74VJElwXMZqan5VaQ5c+
-qsCeVUdw8QsfIZH6XbkvhCswh4k=
------END CERTIFICATE-----`;
-
-const jsenvContentTypeMap = {
-  "application/javascript": {
-    extensions: ["js", "mjs", "ts", "jsx"]
-  },
-  "application/json": {
-    extensions: ["json"]
-  },
-  "application/octet-stream": {},
-  "application/pdf": {
-    extensions: ["pdf"]
-  },
-  "application/xml": {
-    extensions: ["xml"]
-  },
-  "application/x-gzip": {
-    extensions: ["gz"]
-  },
-  "application/wasm": {
-    extensions: ["wasm"]
-  },
-  "application/zip": {
-    extensions: ["zip"]
-  },
-  "audio/basic": {
-    extensions: ["au", "snd"]
-  },
-  "audio/mpeg": {
-    extensions: ["mpga", "mp2", "mp2a", "mp3", "m2a", "m3a"]
-  },
-  "audio/midi": {
-    extensions: ["midi", "mid", "kar", "rmi"]
-  },
-  "audio/mp4": {
-    extensions: ["m4a", "mp4a"]
-  },
-  "audio/ogg": {
-    extensions: ["oga", "ogg", "spx"]
-  },
-  "audio/webm": {
-    extensions: ["weba"]
-  },
-  "audio/x-wav": {
-    extensions: ["wav"]
-  },
-  "font/ttf": {
-    extensions: ["ttf"]
-  },
-  "font/woff": {
-    extensions: ["woff"]
-  },
-  "font/woff2": {
-    extensions: ["woff2"]
-  },
-  "image/png": {
-    extensions: ["png"]
-  },
-  "image/gif": {
-    extensions: ["gif"]
-  },
-  "image/jpeg": {
-    extensions: ["jpg"]
-  },
-  "image/svg+xml": {
-    extensions: ["svg", "svgz"]
-  },
-  "text/plain": {
-    extensions: ["txt"]
-  },
-  "text/html": {
-    extensions: ["html"]
-  },
-  "text/css": {
-    extensions: ["css"]
-  },
-  "text/cache-manifest": {
-    extensions: ["appcache"]
-  },
-  "video/mp4": {
-    extensions: ["mp4", "mp4v", "mpg4"]
-  },
-  "video/mpeg": {
-    extensions: ["mpeg", "mpg", "mpe", "m1v", "m2v"]
-  },
-  "video/ogg": {
-    extensions: ["ogv"]
-  },
-  "video/webm": {
-    extensions: ["webm"]
-  }
-};
-
-// https://github.com/jshttp/mime-db/blob/master/src/apache-types.json
-const urlToContentType = (url, contentTypeMap = jsenvContentTypeMap, contentTypeDefault = "application/octet-stream") => {
-  if (typeof contentTypeMap !== "object") {
-    throw new TypeError(`contentTypeMap must be an object, got ${contentTypeMap}`);
-  }
-
-  const pathname = new URL(url).pathname;
-  const extensionWithDot = path.extname(pathname);
-
-  if (!extensionWithDot || extensionWithDot === ".") {
-    return contentTypeDefault;
-  }
-
-  const extension = extensionWithDot.slice(1);
-  const availableContentTypes = Object.keys(contentTypeMap);
-  const contentTypeForExtension = availableContentTypes.find(contentTypeName => {
-    const contentType = contentTypeMap[contentTypeName];
-    return contentType.extensions && contentType.extensions.indexOf(extension) > -1;
-  });
-  return contentTypeForExtension || contentTypeDefault;
-};
-
-const urlToSearchParamValue = (url, searchParamName) => {
-  return new URL(url).searchParams.get(searchParamName);
 };
 
 const ensureUrlTrailingSlash = url => {
@@ -1310,10 +1049,129 @@ const isWindows$2 = process.platform === "win32";
 
 const readFilePromisified = util.promisify(fs.readFile);
 
+const isWindows$3 = process.platform === "win32";
+
+/* eslint-disable import/max-dependencies */
+const isLinux = process.platform === "linux"; // linux does not support recursive option
+
+const jsenvContentTypeMap = {
+  "application/javascript": {
+    extensions: ["js", "cjs", "mjs", "ts", "jsx"]
+  },
+  "application/json": {
+    extensions: ["json"]
+  },
+  "application/octet-stream": {},
+  "application/pdf": {
+    extensions: ["pdf"]
+  },
+  "application/xml": {
+    extensions: ["xml"]
+  },
+  "application/x-gzip": {
+    extensions: ["gz"]
+  },
+  "application/wasm": {
+    extensions: ["wasm"]
+  },
+  "application/zip": {
+    extensions: ["zip"]
+  },
+  "audio/basic": {
+    extensions: ["au", "snd"]
+  },
+  "audio/mpeg": {
+    extensions: ["mpga", "mp2", "mp2a", "mp3", "m2a", "m3a"]
+  },
+  "audio/midi": {
+    extensions: ["midi", "mid", "kar", "rmi"]
+  },
+  "audio/mp4": {
+    extensions: ["m4a", "mp4a"]
+  },
+  "audio/ogg": {
+    extensions: ["oga", "ogg", "spx"]
+  },
+  "audio/webm": {
+    extensions: ["weba"]
+  },
+  "audio/x-wav": {
+    extensions: ["wav"]
+  },
+  "font/ttf": {
+    extensions: ["ttf"]
+  },
+  "font/woff": {
+    extensions: ["woff"]
+  },
+  "font/woff2": {
+    extensions: ["woff2"]
+  },
+  "image/png": {
+    extensions: ["png"]
+  },
+  "image/gif": {
+    extensions: ["gif"]
+  },
+  "image/jpeg": {
+    extensions: ["jpg"]
+  },
+  "image/svg+xml": {
+    extensions: ["svg", "svgz"]
+  },
+  "text/plain": {
+    extensions: ["txt"]
+  },
+  "text/html": {
+    extensions: ["html"]
+  },
+  "text/css": {
+    extensions: ["css"]
+  },
+  "text/cache-manifest": {
+    extensions: ["appcache"]
+  },
+  "video/mp4": {
+    extensions: ["mp4", "mp4v", "mpg4"]
+  },
+  "video/mpeg": {
+    extensions: ["mpeg", "mpg", "mpe", "m1v", "m2v"]
+  },
+  "video/ogg": {
+    extensions: ["ogv"]
+  },
+  "video/webm": {
+    extensions: ["webm"]
+  }
+};
+
+// https://github.com/jshttp/mime-db/blob/master/src/apache-types.json
+const urlToContentType = (url, contentTypeMap = jsenvContentTypeMap, contentTypeDefault = "application/octet-stream") => {
+  if (typeof contentTypeMap !== "object") {
+    throw new TypeError(`contentTypeMap must be an object, got ${contentTypeMap}`);
+  }
+
+  const pathname = new URL(url).pathname;
+  const extensionWithDot = path.extname(pathname);
+
+  if (!extensionWithDot || extensionWithDot === ".") {
+    return contentTypeDefault;
+  }
+
+  const extension = extensionWithDot.slice(1);
+  const availableContentTypes = Object.keys(contentTypeMap);
+  const contentTypeForExtension = availableContentTypes.find(contentTypeName => {
+    const contentType = contentTypeMap[contentTypeName];
+    return contentType.extensions && contentType.extensions.indexOf(extension) > -1;
+  });
+  return contentTypeForExtension || contentTypeDefault;
+};
+
 const {
   readFile
 } = fs.promises;
 const serveFile = async (source, {
+  cancellationToken = createCancellationToken(),
   method = "GET",
   headers = {},
   canReadDirectory = false,
@@ -1327,12 +1185,16 @@ const serveFile = async (source, {
   }
 
   const sourceUrl = assertAndNormalizeFileUrl(source);
+  const clientCacheDisabled = headers["cache-control"] === "no-cache";
 
   try {
-    const cacheWithMtime = cacheStrategy === "mtime";
-    const cacheWithETag = cacheStrategy === "etag";
-    const cachedDisabled = cacheStrategy === "none";
-    const sourceStat = await readFileSystemNodeStat(sourceUrl);
+    const cacheWithMtime = !clientCacheDisabled && cacheStrategy === "mtime";
+    const cacheWithETag = !clientCacheDisabled && cacheStrategy === "etag";
+    const cachedDisabled = clientCacheDisabled || cacheStrategy === "none";
+    const sourceStat = await createOperation({
+      cancellationToken,
+      start: () => readFileSystemNodeStat(sourceUrl)
+    });
 
     if (sourceStat.isDirectory()) {
       if (canReadDirectory === false) {
@@ -1346,7 +1208,10 @@ const serveFile = async (source, {
         };
       }
 
-      const directoryContentArray = await readDirectory(sourceUrl);
+      const directoryContentArray = await createOperation({
+        cancellationToken,
+        start: () => readDirectory(sourceUrl)
+      });
       const directoryContentJson = JSON.stringify(directoryContentArray);
       return {
         status: 200,
@@ -1372,7 +1237,10 @@ const serveFile = async (source, {
     }
 
     if (cacheWithETag) {
-      const fileContentAsBuffer = await readFile(urlToFileSystemPath(sourceUrl));
+      const fileContentAsBuffer = await createOperation({
+        cancellationToken,
+        start: () => readFile(urlToFileSystemPath(sourceUrl))
+      });
       const fileContentEtag = bufferToEtag(fileContentAsBuffer);
 
       if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
@@ -1445,10 +1313,240 @@ const dateToSecondsPrecision = date => {
   return dateWithSecondsPrecision;
 };
 
-// eslint-disable-next-line import/no-unresolved
-const nodeRequire = require;
-const filenameContainsBackSlashes = __filename.indexOf("\\") > -1;
-const url = filenameContainsBackSlashes ? `file:///${__filename.replace(/\\/g, "/")}` : `file://${__filename}`;
+const require$1 = module$1.createRequire(url);
+
+const nodeFetch = require$1("node-fetch");
+
+const AbortController = require$1("abort-controller");
+
+const {
+  Response
+} = nodeFetch;
+const fetchUrl = async (url, {
+  cancellationToken = createCancellationToken(),
+  standard = false,
+  canReadDirectory,
+  contentTypeMap,
+  cacheStrategy,
+  ...options
+} = {}) => {
+  try {
+    url = String(new URL(url));
+  } catch (e) {
+    throw new Error(`fetchUrl first argument must be an absolute url, received ${url}`);
+  }
+
+  if (url.startsWith("file://")) {
+    const {
+      status,
+      statusText,
+      headers,
+      body
+    } = await serveFile(url, {
+      cancellationToken,
+      cacheStrategy,
+      canReadDirectory,
+      contentTypeMap,
+      ...options
+    });
+    const response = new Response(typeof body === "string" ? Buffer.from(body) : body, {
+      url,
+      status,
+      statusText,
+      headers
+    });
+    return standard ? response : standardResponseToSimplifiedResponse(response);
+  }
+
+  const response = await createOperation({
+    cancellationToken,
+    start: () => nodeFetch(url, {
+      signal: cancellationTokenToAbortSignal(cancellationToken),
+      ...options
+    })
+  });
+  return standard ? response : standardResponseToSimplifiedResponse(response);
+}; // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
+
+const cancellationTokenToAbortSignal = cancellationToken => {
+  const abortController = new AbortController();
+  cancellationToken.register(reason => {
+    abortController.abort(reason);
+  });
+  return abortController.signal;
+};
+
+const standardResponseToSimplifiedResponse = async response => {
+  const text = await response.text();
+  return {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseToHeaders(response),
+    body: text
+  };
+};
+
+const responseToHeaders = response => {
+  const headers = {};
+  response.headers.forEach((value, name) => {
+    headers[name] = value;
+  });
+  return headers;
+};
+
+const listen = ({
+  cancellationToken,
+  server,
+  port,
+  ip
+}) => {
+  return createStoppableOperation({
+    cancellationToken,
+    start: () => startListening(server, port, ip),
+    stop: () => stopListening(server)
+  });
+};
+const startListening = (server, port, ip) => new Promise((resolve, reject) => {
+  server.on("error", reject);
+  server.on("listening", () => {
+    // in case port is 0 (randomly assign an available port)
+    // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
+    resolve(server.address().port);
+  });
+  server.listen(port, ip);
+});
+const stopListening = server => new Promise((resolve, reject) => {
+  server.on("error", reject);
+  server.on("close", resolve);
+  server.close();
+});
+
+const findFreePort = async (initialPort = 1, {
+  cancellationToken = createCancellationToken(),
+  ip = "127.0.0.1",
+  min = 1,
+  max = 65534,
+  next = port => port + 1
+} = {}) => {
+  const testUntil = async (port, ip) => {
+    const free = await portIsFree({
+      cancellationToken,
+      port,
+      ip
+    });
+
+    if (free) {
+      return port;
+    }
+
+    const nextPort = next(port);
+
+    if (nextPort > max) {
+      throw new Error(`${ip} has no available port between ${min} and ${max}`);
+    }
+
+    return testUntil(nextPort, ip);
+  };
+
+  return testUntil(initialPort, ip);
+};
+
+const portIsFree = async ({
+  cancellationToken,
+  port,
+  ip
+}) => {
+  const server = net.createServer();
+  const listenOperation = listen({
+    cancellationToken,
+    server,
+    port,
+    ip
+  });
+  return listenOperation.then(() => {
+    const stopPromise = listenOperation.stop(); // cancellation must wait for server to be closed before considering
+    // cancellation as done
+
+    cancellationToken.register(() => stopPromise);
+    return stopPromise.then(() => true);
+  }, error => {
+    if (error && error.code === "EADDRINUSE") {
+      return false;
+    }
+
+    if (error && error.code === "EACCES") {
+      return false;
+    }
+
+    return Promise.reject(error);
+  });
+};
+
+const firstService = (...callbacks) => {
+  return firstOperationMatching({
+    array: callbacks,
+    start: callback => callback(),
+    predicate: serviceGeneratedResponsePredicate
+  });
+};
+
+const serviceGeneratedResponsePredicate = value => {
+  if (value === null) {
+    return false;
+  }
+
+  return typeof value === "object";
+};
+
+const jsenvAccessControlAllowedHeaders = ["x-requested-with"];
+
+const jsenvAccessControlAllowedMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"];
+
+const jsenvPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
+MIICXAIBAAKBgQCll1gJkJqB+KRZsyepQ7gs81UO+73aKPaNbjp/dwo9XfqvNdDp
+Ki4zfTwzzJyFXkoN+NGihfQHI+VqRGITc+XzmBPcGu9XIvYy52lV3zjG4sldz+r8
+iNBzFwFSdUGmaHfkcm0YhvcjdRhyKalDaLMc3pVX4dq9rRzqm+pkbzVfVQIDAQAB
+AoGAImSo2HO8Y7ptCGR5nGKAYnW3+QC4khNoAkAezlK/Qbe/VZzr40Hrjq44Ttn0
+uI64+uXvRL5lzQXbpJLHfBraa8J6Vstf2Kwadmg+FyrqBcet6gidqZ6S1LBTfXII
+eSUcMIqkourv7LWOs8BfWQQiCf0Em0shGK1qf1lgiOQxoJECQQD+dSJOPqKbdZfJ
+/JcsInf5dPkfTNZMhBxpxqiYOvU3684W3LHB1g6BXjHmIF/CIrxcAHsxxXwTGWu9
+23Ffu+xPAkEApphOt+CzGdYq+Ygjj6Hq+hx3hkUwKUHSEOcNXG0Eb90m2sCEkXgz
+xH7fKYXaohFtis7IFJR4UfYD8pkGYVmdGwJAJf/iFqM9709ZUp25CatAFW3Fgkoc
+OqMEBzvWk51CX46EYV+l4BeSZPlnJEGzay96x5Z+z0j5pXSHZXvu62gJ+wJACci+
+LsxymFzcr0UQmZnv2/qaBne/yVyFQtrfDQOWFB/P7V8LKiP+Hlc5Mg4bdhNB9LoK
+RDMoEeA6ASB9oHAL6wJBAJcYLOICBVQrTil6DroEkrIxQY/S+arKc42uFpj98S+w
+k3doJf8KKDrclaRnKfMXxGYhXPUWFpa5fFr1hvcprEo=
+-----END RSA PRIVATE KEY-----`;
+const jsenvPublicKey = `-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCll1gJkJqB+KRZsyepQ7gs81UO
++73aKPaNbjp/dwo9XfqvNdDpKi4zfTwzzJyFXkoN+NGihfQHI+VqRGITc+XzmBPc
+Gu9XIvYy52lV3zjG4sldz+r8iNBzFwFSdUGmaHfkcm0YhvcjdRhyKalDaLMc3pVX
+4dq9rRzqm+pkbzVfVQIDAQAB
+-----END PUBLIC KEY-----`;
+const jsenvCertificate = `-----BEGIN CERTIFICATE-----
+MIIDEDCCAnmgAwIBAgIQd9Gto4GPGwXcLk0flq7bsjANBgkqhkiG9w0BAQsFADCB
+kTEuMCwGA1UEAxMlaHR0cHM6Ly9naXRodWIuY29tL2pzZW52L2pzZW52LXNlcnZl
+cjELMAkGA1UEBhMCRlIxGDAWBgNVBAgTD0FscGVzIE1hcml0aW1lczERMA8GA1UE
+BxMIVmFsYm9ubmUxDjAMBgNVBAoTBWpzZW52MRUwEwYDVQQLEwxqc2VudiBzZXJ2
+ZXIwHhcNMTkwNzA5MTQ1MzU4WhcNMjgwNzA5MTQ1MzU5WjCBkTEuMCwGA1UEAxMl
+aHR0cHM6Ly9naXRodWIuY29tL2pzZW52L2pzZW52LXNlcnZlcjELMAkGA1UEBhMC
+RlIxGDAWBgNVBAgTD0FscGVzIE1hcml0aW1lczERMA8GA1UEBxMIVmFsYm9ubmUx
+DjAMBgNVBAoTBWpzZW52MRUwEwYDVQQLEwxqc2VudiBzZXJ2ZXIwgZ8wDQYJKoZI
+hvcNAQEBBQADgY0AMIGJAoGBAKWXWAmQmoH4pFmzJ6lDuCzzVQ77vdoo9o1uOn93
+Cj1d+q810OkqLjN9PDPMnIVeSg340aKF9Acj5WpEYhNz5fOYE9wa71ci9jLnaVXf
+OMbiyV3P6vyI0HMXAVJ1QaZod+RybRiG9yN1GHIpqUNosxzelVfh2r2tHOqb6mRv
+NV9VAgMBAAGjZzBlMAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1Ud
+JQQMMAoGCCsGAQUFBwMBMB8GA1UdIwQYMBaAFOQhJA9S7idbpNIbvKMyeRWbwyad
+MA8GA1UdEQQIMAaHBH8AAAEwDQYJKoZIhvcNAQELBQADgYEAUKPupneUl1bdjbbf
+QvUqAExIK0Nv2u54X8l0EJvkdPMNQEer7Npzg5RQWExtvamfEZI1EPOeVfPVu5sz
+q4DB6OgAEzkytbKtcgPlhY0GDbim8ELCpO1JNDn/jUXH74VJElwXMZqan5VaQ5c+
+qsCeVUdw8QsfIZH6XbkvhCswh4k=
+-----END CERTIFICATE-----`;
+
+const urlToSearchParamValue = (url, searchParamName) => {
+  return new URL(url).searchParams.get(searchParamName);
+};
 
 let beforeExitCallbackArray = [];
 let uninstall;
@@ -2166,9 +2264,9 @@ const STOP_REASON_PROCESS_DEATH = createReason("process death");
 const STOP_REASON_PROCESS_EXIT = createReason("process exit");
 const STOP_REASON_NOT_SPECIFIED = createReason("not specified");
 
-const require$1 = module$1.createRequire(url);
+const require$2 = module$1.createRequire(url);
 
-const killPort = require$1("kill-port");
+const killPort = require$2("kill-port");
 
 const STATUS_TEXT_INTERNAL_ERROR = "internal error";
 const startServer = async ({
@@ -2642,6 +2740,7 @@ exports.acceptsContentType = acceptsContentType;
 exports.composeResponse = composeResponse;
 exports.convertFileSystemErrorToResponseProperties = convertFileSystemErrorToResponseProperties;
 exports.createSSERoom = createSSERoom;
+exports.fetchUrl = fetchUrl;
 exports.findFreePort = findFreePort;
 exports.firstService = firstService;
 exports.jsenvAccessControlAllowedHeaders = jsenvAccessControlAllowedHeaders;
@@ -2653,4 +2752,4 @@ exports.serveFile = serveFile;
 exports.startServer = startServer;
 exports.urlToContentType = urlToContentType;
 exports.urlToSearchParamValue = urlToSearchParamValue;
-//# sourceMappingURL=main.js.map
+//# sourceMappingURL=main.cjs.map

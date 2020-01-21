@@ -41,10 +41,16 @@ startServer({
 })
 ```
 
+For node < 13 use
+
+```js
+const { startServer } = require("@jsenv/server")
+```
+
 # Installation
 
 ```console
-npm install @jsenv/server@1.3.0
+npm install @jsenv/server@1.5.0
 ```
 
 # Documentation
