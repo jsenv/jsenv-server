@@ -42,8 +42,7 @@ const STATUS_TEXT_INTERNAL_ERROR = "internal error"
 export const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
-  logStart = true,
-  logStop = true,
+  serverName = "server",
 
   protocol = "http",
   ip = "127.0.0.1",
@@ -147,9 +146,7 @@ export const startServer = async ({
   })
   const stop = memoizeOnce(async (reason = STOP_REASON_NOT_SPECIFIED) => {
     status = "closing"
-    if (logStop) {
-      logger.info(`server stopped because ${reason}`)
-    }
+    logger.info(`${serverName} stopped because ${reason}`)
 
     await cleanup(reason)
     await stopListening(nodeServer)
@@ -206,9 +203,7 @@ export const startServer = async ({
   port = await startOperation
   status = "opened"
   const origin = originAsString({ protocol, ip, port })
-  if (logStart) {
-    logger.info(`server started at ${origin}`)
-  }
+  logger.info(`${serverName} started at ${origin}`)
   startedCallback({ origin })
 
   // nodeServer.on("upgrade", (request, socket, head) => {

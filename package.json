@@ -1,6 +1,6 @@
 {
 	"name": "@jsenv/server",
-	"version": "1.5.0",
+	"version": "1.5.1",
 	"description": "High level api for node.js server.",
 	"license": "MIT",
 	"repository": {
@@ -15,7 +15,12 @@
 		"node": ">=12.0.0"
 	},
 	"type": "module",
-	"exports": "./index.js",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./dist/commonjs/main.cjs"
+    }
+  },
 	"module": "index.js",
 	"main": "dist/commonjs/main.cjs",
 	"files": [
