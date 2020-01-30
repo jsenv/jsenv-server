@@ -1324,7 +1324,7 @@ const {
 } = nodeFetch;
 const fetchUrl = async (url, {
   cancellationToken = createCancellationToken(),
-  standard = false,
+  simplified = false,
   canReadDirectory,
   contentTypeMap,
   cacheStrategy,
@@ -1355,25 +1355,32 @@ const fetchUrl = async (url, {
       statusText,
       headers
     });
-    return standard ? response : standardResponseToSimplifiedResponse(response);
-  }
+    return simplified ? standardResponseToSimplifiedResponse(response) : response;
+  } // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
 
-  const response = await createOperation({
-    cancellationToken,
-    start: () => nodeFetch(url, {
-      signal: cancellationTokenToAbortSignal(cancellationToken),
-      ...options
-    })
-  });
-  return standard ? response : standardResponseToSimplifiedResponse(response);
-}; // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
 
-const cancellationTokenToAbortSignal = cancellationToken => {
   const abortController = new AbortController();
+  let cancelError;
   cancellationToken.register(reason => {
+    cancelError = reason;
     abortController.abort(reason);
   });
-  return abortController.signal;
+  let response;
+
+  try {
+    response = await nodeFetch(url, {
+      signal: abortController.signal,
+      ...options
+    });
+  } catch (e) {
+    if (cancelError && e.name === "AbortError") {
+      throw cancelError;
+    }
+
+    throw e;
+  }
+
+  return simplified ? standardResponseToSimplifiedResponse(response) : response;
 };
 
 const standardResponseToSimplifiedResponse = async response => {
@@ -2272,8 +2279,7 @@ const STATUS_TEXT_INTERNAL_ERROR = "internal error";
 const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
-  logStart = true,
-  logStop = true,
+  serverName = "server",
   protocol = "http",
   ip = "127.0.0.1",
   port = 0,
@@ -2382,11 +2388,7 @@ const startServer = async ({
   });
   const stop = memoizeOnce$1(async (reason = STOP_REASON_NOT_SPECIFIED) => {
     status = "closing";
-
-    if (logStop) {
-      logger.info(`server stopped because ${reason}`);
-    }
-
+    logger.info(`${serverName} stopped because ${reason}`);
     await cleanup(reason);
     await stopListening(nodeServer);
     status = "stopped";
@@ -2448,11 +2450,7 @@ const startServer = async ({
     ip,
     port
   });
-
-  if (logStart) {
-    logger.info(`server started at ${origin}`);
-  }
-
+  logger.info(`${serverName} started at ${origin}`);
   startedCallback({
     origin
   }); // nodeServer.on("upgrade", (request, socket, head) => {
@@ -2480,7 +2478,11 @@ const startServer = async ({
     logger.info(`${request.method} ${request.origin}${request.ressource}`);
 
     if (error) {
-      logger.error(error);
+      logger.error(`internal error while handling request.
+--- error stack ---
+${error.stack}
+--- request ---
+${request.method} ${request.origin}${request.ressource}`);
     }
 
     logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`);

@@ -235,7 +235,11 @@ export const startServer = async ({
 
     logger.info(`${request.method} ${request.origin}${request.ressource}`)
     if (error) {
-      logger.error(error)
+      logger.error(`internal error while handling request.
+--- error stack ---
+${error.stack}
+--- request ---
+${request.method} ${request.origin}${request.ressource}`)
     }
     logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`)
     populateNodeResponse(nodeResponse, response, {

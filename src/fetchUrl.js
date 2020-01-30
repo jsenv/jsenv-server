@@ -1,7 +1,7 @@
 // https://github.com/node-fetch/node-fetch/blob/8c197f8982a238b3c345c64b17bfa92e16b4f7c4/src/response.js#L1
 
 import { createRequire } from "module"
-import { createCancellationToken, createOperation } from "@jsenv/cancellation"
+import { createCancellationToken } from "@jsenv/cancellation"
 import { serveFile } from "./serveFile.js"
 
 const require = createRequire(import.meta.url)
@@ -44,24 +44,29 @@ export const fetchUrl = async (
     return simplified ? standardResponseToSimplifiedResponse(response) : response
   }
 
-  const response = await createOperation({
-    cancellationToken,
-    start: () =>
-      nodeFetch(url, {
-        signal: cancellationTokenToAbortSignal(cancellationToken),
-        ...options,
-      }),
-  })
-  return simplified ? standardResponseToSimplifiedResponse(response) : response
-}
-
-// https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
-const cancellationTokenToAbortSignal = (cancellationToken) => {
+  // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
   const abortController = new AbortController()
+
+  let cancelError
   cancellationToken.register((reason) => {
+    cancelError = reason
     abortController.abort(reason)
   })
-  return abortController.signal
+
+  let response
+  try {
+    response = await nodeFetch(url, {
+      signal: abortController.signal,
+      ...options,
+    })
+  } catch (e) {
+    if (cancelError && e.name === "AbortError") {
+      throw cancelError
+    }
+    throw e
+  }
+
+  return simplified ? standardResponseToSimplifiedResponse(response) : response
 }
 
 const standardResponseToSimplifiedResponse = async (response) => {
