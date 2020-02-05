@@ -19,7 +19,7 @@ export const trackConnections = (nodeServer, { onError }) => {
         return new Promise((resolve, reject) => {
           connection.destroy(reason, (error) => {
             if (error) {
-              if (error.code === "ENOTCONN") {
+              if (error === reason || error.code === "ENOTCONN") {
                 resolve()
               } else {
                 reject(error)
