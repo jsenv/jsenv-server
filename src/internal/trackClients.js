@@ -22,12 +22,12 @@ export const trackClients = (nodeServer) => {
         }
 
         return new Promise((resolve) => {
-          if (nodeResponse.finished === false) {
+          if (nodeResponse.finished) {
+            resolve()
+          } else {
             nodeResponse.on("finish", resolve)
             nodeResponse.on("error", resolve)
             nodeResponse.destroy(reason)
-          } else {
-            resolve()
           }
         })
       }),

@@ -14,7 +14,7 @@ export const trackConnections = (nodeServer) => {
     nodeServer.removeListener("connection", connectionListener)
 
     await Promise.all(
-      connections.map((connection) => {
+      Array.from(connections).map((connection) => {
         return new Promise((resolve, reject) => {
           connection.destroy(reason, (error) => {
             if (error) {

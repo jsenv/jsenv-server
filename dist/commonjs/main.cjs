@@ -1956,12 +1956,23 @@ const trackConnections = nodeServer => {
 
   nodeServer.on("connection", connectionListener);
 
-  const stop = reason => {
-    nodeServer.removeListener("connection", connectionListener); // should we do this async ?
-
-    connections.forEach(connection => {
-      connection.destroy(reason);
-    });
+  const stop = async reason => {
+    nodeServer.removeListener("connection", connectionListener);
+    await Promise.all(connections.map(connection => {
+      return new Promise((resolve, reject) => {
+        connection.destroy(reason, error => {
+          if (error) {
+            if (error.code === "ENOTCONN") {
+              resolve();
+            } else {
+              reject(error);
+            }
+          } else {
+            resolve();
+          }
+        });
+      });
+    }));
   };
 
   return {
