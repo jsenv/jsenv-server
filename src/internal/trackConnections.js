@@ -20,6 +20,9 @@ export const trackConnections = (nodeServer) => {
             if (error === reason) {
               return
             }
+            if (error.code === "ECONNRESET") {
+              return
+            }
             throw error
           })
           connection.destroy(reason, (error) => {
