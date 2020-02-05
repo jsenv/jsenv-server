@@ -1,10 +1,11 @@
-export const trackConnections = (nodeServer) => {
+export const trackConnections = (nodeServer, { onError }) => {
   const connections = new Set()
 
   const connectionListener = (connection) => {
     connection.on("close", () => {
       connections.delete(connection)
     })
+    connection.on("error", onError)
     connections.add(connection)
   }
 

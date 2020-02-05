@@ -1958,7 +1958,7 @@ const trackConnections = nodeServer => {
 
   const stop = async reason => {
     nodeServer.removeListener("connection", connectionListener);
-    await Promise.all(connections.map(connection => {
+    await Promise.all(Array.from(connections).map(connection => {
       return new Promise((resolve, reject) => {
         connection.destroy(reason, error => {
           if (error) {
@@ -2009,12 +2009,12 @@ const trackClients = nodeServer => {
       }
 
       return new Promise(resolve => {
-        if (nodeResponse.finished === false) {
+        if (nodeResponse.finished) {
+          resolve();
+        } else {
           nodeResponse.on("finish", resolve);
           nodeResponse.on("error", resolve);
           nodeResponse.destroy(reason);
-        } else {
-          resolve();
         }
       });
     }));

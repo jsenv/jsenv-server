@@ -119,7 +119,14 @@ export const startServer = async ({
 
   const { registerCleanupCallback, cleanup } = createTracker()
 
-  const connectionTracker = trackConnections(nodeServer)
+  const connectionTracker = trackConnections(nodeServer, {
+    onError: (error) => {
+      if (status === "stopping" && error.code === "ENOTCONN") {
+        return
+      }
+      throw error
+    },
+  })
   // opened connection must be shutdown before the close event is emitted
   registerCleanupCallback(connectionTracker.stop)
 
@@ -131,13 +138,13 @@ export const startServer = async ({
       // reason = 'shutdown because error'
     } else {
       responseStatus = 503
-      // reason = 'unavailable because closing'
+      // reason = 'unavailable because stopping'
     }
     clientTracker.stop({ status: responseStatus, reason })
   })
 
   const requestHandlerTracker = trackRequestHandlers(nodeServer)
-  // ensure we don't try to handle request while server is closing
+  // ensure we don't try to handle request while server is stopping
   registerCleanupCallback(requestHandlerTracker.stop)
 
   let stoppedResolve
@@ -145,7 +152,7 @@ export const startServer = async ({
     stoppedResolve = resolve
   })
   const stop = memoizeOnce(async (reason = STOP_REASON_NOT_SPECIFIED) => {
-    status = "closing"
+    status = "stopping"
     logger.info(`${serverName} stopped because ${reason}`)
 
     await cleanup(reason)
