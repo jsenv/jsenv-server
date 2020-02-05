@@ -6,6 +6,9 @@ import {
   createCancellationToken,
   createOperation,
   createStoppableOperation,
+  composeCancellationToken,
+  createCancellationSource,
+  isCancelError,
 } from "@jsenv/cancellation"
 import { interruptSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
 import { createLogger } from "@jsenv/logger"
@@ -92,14 +95,50 @@ export const startServer = async ({
   startedCallback = () => {},
   stoppedCallback = () => {},
 } = {}) => {
-  if (port === 0 && forcePort) throw new Error(`no need to pass forcePort when port is 0`)
-  if (protocol !== "http" && protocol !== "https")
+  if (port === 0 && forcePort) {
+    throw new Error(`no need to pass forcePort when port is 0`)
+  }
+  if (protocol !== "http" && protocol !== "https") {
     throw new Error(`protocol must be http or https, got ${protocol}`)
+  }
   // https://github.com/nodejs/node/issues/14900
-  if (ip === "0.0.0.0" && process.platform === "win32")
+  if (ip === "0.0.0.0" && process.platform === "win32") {
     throw new Error(`listening ${ip} not available on window`)
+  }
 
   const logger = createLogger({ logLevel })
+
+  const internalCancellationSource = createCancellationSource()
+  cancellationToken = composeCancellationToken(cancellationToken, internalCancellationSource.token)
+  const { registerCleanupCallback, cleanup } = createTracker()
+
+  if (stopOnCrash) {
+    const unregister = unadvisedCrashSignal.addCallback((reason) => {
+      internalCancellationSource.cancel(reason.value)
+    })
+    registerCleanupCallback(unregister)
+  }
+
+  if (stopOnSIGINT) {
+    const unregister = interruptSignal.addCallback(() => {
+      internalCancellationSource.cancel(STOP_REASON_PROCESS_SIGINT)
+    })
+    registerCleanupCallback(unregister)
+  }
+
+  if (stopOnExit) {
+    const unregister = teardownSignal.addCallback((tearDownReason) => {
+      internalCancellationSource.cancel(
+        {
+          beforeExit: STOP_REASON_PROCESS_BEFORE_EXIT,
+          hangupOrDeath: STOP_REASON_PROCESS_HANGUP_OR_DEATH,
+          death: STOP_REASON_PROCESS_DEATH,
+          exit: STOP_REASON_PROCESS_EXIT,
+        }[tearDownReason],
+      )
+    })
+    registerCleanupCallback(unregister)
+  }
 
   if (forcePort) {
     await createOperation({
@@ -116,10 +155,9 @@ export const startServer = async ({
   }
 
   let status = "starting"
+  let onConnectionError = () => {}
 
-  const { registerCleanupCallback, cleanup } = createTracker()
-
-  const connectionTracker = trackConnections(nodeServer)
+  const connectionTracker = trackConnections(nodeServer, { onConnectionError })
   // opened connection must be shutdown before the close event is emitted
   registerCleanupCallback(connectionTracker.stop)
 
@@ -146,6 +184,18 @@ export const startServer = async ({
   })
   const stop = memoizeOnce(async (reason = STOP_REASON_NOT_SPECIFIED) => {
     status = "stopping"
+    onConnectionError = (error) => {
+      if (error === reason) {
+        return
+      }
+      if (error && error.code === "ECONNRESET") {
+        return
+      }
+      if (isCancelError(reason)) {
+        return
+      }
+      throw error
+    }
     logger.info(`${serverName} stopped because ${reason}`)
 
     await cleanup(reason)
@@ -154,51 +204,12 @@ export const startServer = async ({
     stoppedCallback({ reason })
     stoppedResolve(reason)
   })
+  cancellationToken.register(stop)
   const startOperation = createStoppableOperation({
     cancellationToken,
     start: () => listen({ cancellationToken, server: nodeServer, port, ip }),
     stop: (_, reason) => stop(reason),
   })
-
-  if (stopOnCrash) {
-    const unregister = unadvisedCrashSignal.addCallback((reason) => {
-      stop(reason.value)
-    })
-    registerCleanupCallback(unregister)
-  }
-
-  if (stopOnInternalError) {
-    const unregister = requestHandlerTracker.add((nodeRequest, nodeResponse) => {
-      if (
-        nodeResponse.statusCode === 500 &&
-        nodeResponse.statusMessage === STATUS_TEXT_INTERNAL_ERROR
-      ) {
-        stop(STOP_REASON_INTERNAL_ERROR)
-      }
-    })
-    registerCleanupCallback(unregister)
-  }
-
-  if (stopOnExit) {
-    const unregister = teardownSignal.addCallback((tearDownReason) => {
-      stop(
-        {
-          beforeExit: STOP_REASON_PROCESS_BEFORE_EXIT,
-          hangupOrDeath: STOP_REASON_PROCESS_HANGUP_OR_DEATH,
-          death: STOP_REASON_PROCESS_DEATH,
-          exit: STOP_REASON_PROCESS_EXIT,
-        }[tearDownReason],
-      )
-    })
-    registerCleanupCallback(unregister)
-  }
-
-  if (stopOnSIGINT) {
-    const unregister = interruptSignal.addCallback(() => {
-      stop(STOP_REASON_PROCESS_SIGINT)
-    })
-    registerCleanupCallback(unregister)
-  }
 
   port = await startOperation
   status = "opened"
@@ -331,6 +342,18 @@ ${request.method} ${request.origin}${request.ressource}`)
         error,
       }
     }
+  }
+
+  if (stopOnInternalError) {
+    const unregister = requestHandlerTracker.add((nodeRequest, nodeResponse) => {
+      if (
+        nodeResponse.statusCode === 500 &&
+        nodeResponse.statusMessage === STATUS_TEXT_INTERNAL_ERROR
+      ) {
+        stop(STOP_REASON_INTERNAL_ERROR)
+      }
+    })
+    registerCleanupCallback(unregister)
   }
 
   return {

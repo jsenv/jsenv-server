@@ -1,10 +1,11 @@
-export const trackConnections = (nodeServer) => {
+export const trackConnections = (nodeServer, { onConnectionError }) => {
   const connections = new Set()
 
   const connectionListener = (connection) => {
     connection.on("close", () => {
       connections.delete(connection)
     })
+    connection.on("error", onConnectionError)
     connections.add(connection)
   }
 
@@ -16,15 +17,6 @@ export const trackConnections = (nodeServer) => {
     await Promise.all(
       Array.from(connections).map((connection) => {
         return new Promise((resolve, reject) => {
-          connection.on("error", (error) => {
-            if (error === reason) {
-              return
-            }
-            if (error.code === "ECONNRESET") {
-              return
-            }
-            throw error
-          })
           connection.destroy(reason, (error) => {
             if (error) {
               if (error === reason || error.code === "ENOTCONN") {
