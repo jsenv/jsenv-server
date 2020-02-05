@@ -10,7 +10,7 @@ import {
   createCancellationSource,
   isCancelError,
 } from "@jsenv/cancellation"
-import { interruptSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
+import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
 import { createLogger } from "@jsenv/logger"
 import { memoizeOnce } from "./internal/memoizeOnce.js"
 import { urlToOrigin } from "./internal/urlToOrigin.js"
@@ -26,10 +26,10 @@ import { listen, stopListening } from "./internal/listen.js"
 import { composeResponse } from "./composeResponse.js"
 import {
   STOP_REASON_INTERNAL_ERROR,
+  STOP_REASON_PROCESS_SIGHUP,
+  STOP_REASON_PROCESS_SIGTERM,
   STOP_REASON_PROCESS_SIGINT,
   STOP_REASON_PROCESS_BEFORE_EXIT,
-  STOP_REASON_PROCESS_HANGUP_OR_DEATH,
-  STOP_REASON_PROCESS_DEATH,
   STOP_REASON_PROCESS_EXIT,
   STOP_REASON_NOT_SPECIFIED,
 } from "./stopReasons.js"
@@ -119,23 +119,22 @@ export const startServer = async ({
     registerCleanupCallback(unregister)
   }
 
-  if (stopOnSIGINT) {
-    const unregister = interruptSignal.addCallback(() => {
-      internalCancellationSource.cancel(STOP_REASON_PROCESS_SIGINT)
-    })
-    registerCleanupCallback(unregister)
-  }
-
   if (stopOnExit) {
     const unregister = teardownSignal.addCallback((tearDownReason) => {
       internalCancellationSource.cancel(
         {
+          SIGHUP: STOP_REASON_PROCESS_SIGHUP,
+          SIGTERM: STOP_REASON_PROCESS_SIGTERM,
+          SIGINT: STOP_REASON_PROCESS_SIGINT,
           beforeExit: STOP_REASON_PROCESS_BEFORE_EXIT,
-          hangupOrDeath: STOP_REASON_PROCESS_HANGUP_OR_DEATH,
-          death: STOP_REASON_PROCESS_DEATH,
           exit: STOP_REASON_PROCESS_EXIT,
         }[tearDownReason],
       )
+    })
+    registerCleanupCallback(unregister)
+  } else if (stopOnSIGINT) {
+    const unregister = SIGINTSignal.addCallback(() => {
+      internalCancellationSource.cancel(STOP_REASON_PROCESS_SIGINT)
     })
     registerCleanupCallback(unregister)
   }

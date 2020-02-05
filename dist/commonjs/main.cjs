@@ -689,6 +689,149 @@ const firstOperationMatching = ({
   });
 };
 
+const createCancelError = reason => {
+  const cancelError = new Error(`canceled because ${reason}`);
+  cancelError.name = "CANCEL_ERROR";
+  cancelError.reason = reason;
+  return cancelError;
+};
+const isCancelError = value => {
+  return value && typeof value === "object" && value.name === "CANCEL_ERROR";
+};
+
+const composeCancellationToken = (...tokens) => {
+  const register = callback => {
+    if (typeof callback !== "function") {
+      throw new Error(`callback must be a function, got ${callback}`);
+    }
+
+    const registrationArray = [];
+
+    const visit = i => {
+      const token = tokens[i];
+      const registration = token.register(callback);
+      registrationArray.push(registration);
+    };
+
+    let i = 0;
+
+    while (i < tokens.length) {
+      visit(i++);
+    }
+
+    const compositeRegistration = {
+      callback,
+      unregister: () => {
+        registrationArray.forEach(registration => registration.unregister());
+        registrationArray.length = 0;
+      }
+    };
+    return compositeRegistration;
+  };
+
+  let requested = false;
+  let cancelError;
+  const internalRegistration = register(parentCancelError => {
+    requested = true;
+    cancelError = parentCancelError;
+    internalRegistration.unregister();
+  });
+
+  const throwIfRequested = () => {
+    if (requested) {
+      throw cancelError;
+    }
+  };
+
+  return {
+    register,
+
+    get cancellationRequested() {
+      return requested;
+    },
+
+    throwIfRequested
+  };
+};
+
+const arrayWithout = (array, item) => {
+  const arrayWithoutItem = [];
+  let i = 0;
+
+  while (i < array.length) {
+    const value = array[i];
+    i++;
+
+    if (value === item) {
+      continue;
+    }
+
+    arrayWithoutItem.push(value);
+  }
+
+  return arrayWithoutItem;
+};
+
+// https://github.com/tc39/proposal-cancellation/tree/master/stage0
+const createCancellationSource = () => {
+  let requested = false;
+  let cancelError;
+  let registrationArray = [];
+
+  const cancel = reason => {
+    if (requested) return;
+    requested = true;
+    cancelError = createCancelError(reason);
+    const registrationArrayCopy = registrationArray.slice();
+    registrationArray.length = 0;
+    registrationArrayCopy.forEach(registration => {
+      registration.callback(cancelError); // const removedDuringCall = registrationArray.indexOf(registration) === -1
+    });
+  };
+
+  const register = callback => {
+    if (typeof callback !== "function") {
+      throw new Error(`callback must be a function, got ${callback}`);
+    }
+
+    const existingRegistration = registrationArray.find(registration => {
+      return registration.callback === callback;
+    }); // don't register twice
+
+    if (existingRegistration) {
+      return existingRegistration;
+    }
+
+    const registration = {
+      callback,
+      unregister: () => {
+        registrationArray = arrayWithout(registrationArray, registration);
+      }
+    };
+    registrationArray = [registration, ...registrationArray];
+    return registration;
+  };
+
+  const throwIfRequested = () => {
+    if (requested) {
+      throw cancelError;
+    }
+  };
+
+  return {
+    token: {
+      register,
+
+      get cancellationRequested() {
+        return requested;
+      },
+
+      throwIfRequested
+    },
+    cancel
+  };
+};
+
 const ensureUrlTrailingSlash = url => {
   return url.endsWith("/") ? url : `${url}/`;
 };
@@ -1944,13 +2087,16 @@ const urlToOrigin = url => {
   return new URL(url).origin;
 };
 
-const trackConnections = nodeServer => {
+const trackConnections = (nodeServer, {
+  onConnectionError
+}) => {
   const connections = new Set();
 
   const connectionListener = connection => {
     connection.on("close", () => {
       connections.delete(connection);
     });
+    connection.on("error", onConnectionError);
     connections.add(connection);
   };
 
@@ -1960,13 +2106,6 @@ const trackConnections = nodeServer => {
     nodeServer.removeListener("connection", connectionListener);
     await Promise.all(Array.from(connections).map(connection => {
       return new Promise((resolve, reject) => {
-        connection.on("error", error => {
-          if (error === reason) {
-            return;
-          }
-
-          throw error;
-        });
         connection.destroy(reason, error => {
           if (error) {
             if (error === reason || error.code === "ENOTCONN") {
@@ -2346,13 +2485,54 @@ const startServer = async ({
   startedCallback = () => {},
   stoppedCallback = () => {}
 } = {}) => {
-  if (port === 0 && forcePort) throw new Error(`no need to pass forcePort when port is 0`);
-  if (protocol !== "http" && protocol !== "https") throw new Error(`protocol must be http or https, got ${protocol}`); // https://github.com/nodejs/node/issues/14900
+  if (port === 0 && forcePort) {
+    throw new Error(`no need to pass forcePort when port is 0`);
+  }
 
-  if (ip === "0.0.0.0" && process.platform === "win32") throw new Error(`listening ${ip} not available on window`);
+  if (protocol !== "http" && protocol !== "https") {
+    throw new Error(`protocol must be http or https, got ${protocol}`);
+  } // https://github.com/nodejs/node/issues/14900
+
+
+  if (ip === "0.0.0.0" && process.platform === "win32") {
+    throw new Error(`listening ${ip} not available on window`);
+  }
+
   const logger = createLogger({
     logLevel
   });
+  const internalCancellationSource = createCancellationSource();
+  cancellationToken = composeCancellationToken(cancellationToken, internalCancellationSource.token);
+  const {
+    registerCleanupCallback,
+    cleanup
+  } = createTracker();
+
+  if (stopOnCrash) {
+    const unregister = unadvisedCrashSignal.addCallback(reason => {
+      internalCancellationSource.cancel(reason.value);
+    });
+    registerCleanupCallback(unregister);
+  }
+
+  if (stopOnSIGINT) {
+    const unregister = interruptSignal.addCallback(() => {
+      internalCancellationSource.cancel(STOP_REASON_PROCESS_SIGINT);
+    });
+    registerCleanupCallback(unregister);
+  }
+
+  if (stopOnExit) {
+    const unregister = teardownSignal.addCallback(tearDownReason => {
+      internalCancellationSource.cancel({
+        beforeExit: STOP_REASON_PROCESS_BEFORE_EXIT,
+        hangupOrDeath: STOP_REASON_PROCESS_HANGUP_OR_DEATH,
+        death: STOP_REASON_PROCESS_DEATH,
+        exit: STOP_REASON_PROCESS_EXIT
+      }[tearDownReason]);
+    });
+    registerCleanupCallback(unregister);
+  }
 
   if (forcePort) {
     await createOperation({
@@ -2375,11 +2555,12 @@ const startServer = async ({
   }
 
   let status = "starting";
-  const {
-    registerCleanupCallback,
-    cleanup
-  } = createTracker();
-  const connectionTracker = trackConnections(nodeServer); // opened connection must be shutdown before the close event is emitted
+
+  let onConnectionError = () => {};
+
+  const connectionTracker = trackConnections(nodeServer, {
+    onConnectionError
+  }); // opened connection must be shutdown before the close event is emitted
 
   registerCleanupCallback(connectionTracker.stop);
   const clientTracker = trackClients(nodeServer);
@@ -2406,6 +2587,23 @@ const startServer = async ({
   });
   const stop = memoizeOnce$1(async (reason = STOP_REASON_NOT_SPECIFIED) => {
     status = "stopping";
+
+    onConnectionError = error => {
+      if (error === reason) {
+        return;
+      }
+
+      if (error && error.code === "ECONNRESET") {
+        return;
+      }
+
+      if (isCancelError(reason)) {
+        return;
+      }
+
+      throw error;
+    };
+
     logger.info(`${serverName} stopped because ${reason}`);
     await cleanup(reason);
     await stopListening(nodeServer);
@@ -2415,6 +2613,7 @@ const startServer = async ({
     });
     stoppedResolve(reason);
   });
+  cancellationToken.register(stop);
   const startOperation = createStoppableOperation({
     cancellationToken,
     start: () => listen({
@@ -2425,42 +2624,6 @@ const startServer = async ({
     }),
     stop: (_, reason) => stop(reason)
   });
-
-  if (stopOnCrash) {
-    const unregister = unadvisedCrashSignal.addCallback(reason => {
-      stop(reason.value);
-    });
-    registerCleanupCallback(unregister);
-  }
-
-  if (stopOnInternalError) {
-    const unregister = requestHandlerTracker.add((nodeRequest, nodeResponse) => {
-      if (nodeResponse.statusCode === 500 && nodeResponse.statusMessage === STATUS_TEXT_INTERNAL_ERROR) {
-        stop(STOP_REASON_INTERNAL_ERROR);
-      }
-    });
-    registerCleanupCallback(unregister);
-  }
-
-  if (stopOnExit) {
-    const unregister = teardownSignal.addCallback(tearDownReason => {
-      stop({
-        beforeExit: STOP_REASON_PROCESS_BEFORE_EXIT,
-        hangupOrDeath: STOP_REASON_PROCESS_HANGUP_OR_DEATH,
-        death: STOP_REASON_PROCESS_DEATH,
-        exit: STOP_REASON_PROCESS_EXIT
-      }[tearDownReason]);
-    });
-    registerCleanupCallback(unregister);
-  }
-
-  if (stopOnSIGINT) {
-    const unregister = interruptSignal.addCallback(() => {
-      stop(STOP_REASON_PROCESS_SIGINT);
-    });
-    registerCleanupCallback(unregister);
-  }
-
   port = await startOperation;
   status = "opened";
   const origin = originAsString({
@@ -2590,6 +2753,15 @@ ${request.method} ${request.origin}${request.ressource}`);
       };
     }
   };
+
+  if (stopOnInternalError) {
+    const unregister = requestHandlerTracker.add((nodeRequest, nodeResponse) => {
+      if (nodeResponse.statusCode === 500 && nodeResponse.statusMessage === STATUS_TEXT_INTERNAL_ERROR) {
+        stop(STOP_REASON_INTERNAL_ERROR);
+      }
+    });
+    registerCleanupCallback(unregister);
+  }
 
   return {
     getStatus: () => status,

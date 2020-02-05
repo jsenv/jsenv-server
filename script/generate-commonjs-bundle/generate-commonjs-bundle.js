@@ -3,5 +3,4 @@ const jsenvConfig = require("../../jsenv.config.js")
 
 generateCommonJsBundleForNode({
   ...jsenvConfig,
-  cjsExtension: true,
 })
