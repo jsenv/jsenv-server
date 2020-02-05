@@ -121,6 +121,10 @@ export const startServer = async ({
 
   if (stopOnExit) {
     const unregister = teardownSignal.addCallback((tearDownReason) => {
+      if (!stopOnSIGINT && tearDownReason === "SIGINT") {
+        return
+      }
+
       internalCancellationSource.cancel(
         {
           SIGHUP: STOP_REASON_PROCESS_SIGHUP,
