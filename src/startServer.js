@@ -119,14 +119,7 @@ export const startServer = async ({
 
   const { registerCleanupCallback, cleanup } = createTracker()
 
-  const connectionTracker = trackConnections(nodeServer, {
-    onError: (error) => {
-      if (status === "stopping" && error.code === "ENOTCONN") {
-        return
-      }
-      throw error
-    },
-  })
+  const connectionTracker = trackConnections(nodeServer)
   // opened connection must be shutdown before the close event is emitted
   registerCleanupCallback(connectionTracker.stop)
 

@@ -1960,9 +1960,16 @@ const trackConnections = nodeServer => {
     nodeServer.removeListener("connection", connectionListener);
     await Promise.all(Array.from(connections).map(connection => {
       return new Promise((resolve, reject) => {
+        connection.on("error", error => {
+          if (error === reason) {
+            return;
+          }
+
+          throw error;
+        });
         connection.destroy(reason, error => {
           if (error) {
-            if (error.code === "ENOTCONN") {
+            if (error === reason || error.code === "ENOTCONN") {
               resolve();
             } else {
               reject(error);
@@ -2382,7 +2389,7 @@ const startServer = async ({
     if (reason === STOP_REASON_INTERNAL_ERROR) {
       responseStatus = 500; // reason = 'shutdown because error'
     } else {
-      responseStatus = 503; // reason = 'unavailable because closing'
+      responseStatus = 503; // reason = 'unavailable because stopping'
     }
 
     clientTracker.stop({
@@ -2390,7 +2397,7 @@ const startServer = async ({
       reason
     });
   });
-  const requestHandlerTracker = trackRequestHandlers(nodeServer); // ensure we don't try to handle request while server is closing
+  const requestHandlerTracker = trackRequestHandlers(nodeServer); // ensure we don't try to handle request while server is stopping
 
   registerCleanupCallback(requestHandlerTracker.stop);
   let stoppedResolve;
@@ -2398,7 +2405,7 @@ const startServer = async ({
     stoppedResolve = resolve;
   });
   const stop = memoizeOnce$1(async (reason = STOP_REASON_NOT_SPECIFIED) => {
-    status = "closing";
+    status = "stopping";
     logger.info(`${serverName} stopped because ${reason}`);
     await cleanup(reason);
     await stopListening(nodeServer);
