@@ -50,7 +50,7 @@ const { startServer } = require("@jsenv/server")
 # Installation
 
 ```console
-npm install @jsenv/server@1.5.0
+npm install @jsenv/server@1.6.1
 ```
 
 # Documentation

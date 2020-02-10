@@ -4,7 +4,7 @@ const createReason = (reasonString) => {
   }
 }
 
-export const STOP_REASON_INTERNAL_ERROR = createReason("internal error")
+export const STOP_REASON_INTERNAL_ERROR = createReason("Internal error")
 export const STOP_REASON_PROCESS_SIGHUP = createReason("process SIGHUP")
 export const STOP_REASON_PROCESS_SIGTERM = createReason("process SIGTERM")
 export const STOP_REASON_PROCESS_SIGINT = createReason("process SIGINT")
