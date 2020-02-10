@@ -1,6 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer } from "../../index.js"
-import { fetch } from "../testHelpers.js"
+import { startServer, fetchUrl } from "../../index.js"
 
 const server = await startServer({
   protocol: "http",
@@ -23,7 +22,8 @@ const server = await startServer({
   },
 })
 
-const actual = await fetch(server.origin, {
+const actual = await fetchUrl(server.origin, {
+  simplified: true,
   method: "OPTIONS",
   headers: {
     "origin": "http://example.com:80",
@@ -34,6 +34,7 @@ const actual = await fetch(server.origin, {
 const expected = {
   url: `${server.origin}/`,
   status: 200,
+  statusText: "OK",
   headers: {
     "access-control-allow-headers": "x-requested-with, x-whatever",
     "access-control-allow-methods": "GET",

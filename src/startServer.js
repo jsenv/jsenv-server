@@ -11,8 +11,8 @@ import {
   isCancelError,
 } from "@jsenv/cancellation"
 import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
+import { memoize } from "@jsenv/util"
 import { createLogger } from "@jsenv/logger"
-import { memoizeOnce } from "./internal/memoizeOnce.js"
 import { urlToOrigin } from "./internal/urlToOrigin.js"
 import { trackConnections } from "./internal/trackConnections.js"
 import { trackClients } from "./internal/trackClients.js"
@@ -40,7 +40,7 @@ import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
 
-const STATUS_TEXT_INTERNAL_ERROR = "internal error"
+const STATUS_TEXT_INTERNAL_ERROR = "Internal error"
 
 export const startServer = async ({
   cancellationToken = createCancellationToken(),
@@ -185,7 +185,7 @@ export const startServer = async ({
   const stoppedPromise = new Promise((resolve) => {
     stoppedResolve = resolve
   })
-  const stop = memoizeOnce(async (reason = STOP_REASON_NOT_SPECIFIED) => {
+  const stop = memoize(async (reason = STOP_REASON_NOT_SPECIFIED) => {
     status = "stopping"
     onConnectionError = (error) => {
       if (error === reason) {

@@ -1,6 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer } from "../../index.js"
-import { fetch } from "../testHelpers.js"
+import { startServer, fetchUrl } from "../../index.js"
 
 const { origin, stop } = await startServer({
   logLevel: "off",
@@ -24,10 +23,11 @@ const { origin, stop } = await startServer({
 }
 
 {
-  const actual = await fetch(origin)
+  const actual = await fetchUrl(origin, { simplified: true })
   const expected = {
     url: `http://127.0.0.1:8998/`,
     status: 200,
+    statusText: "OK",
     headers: {
       "connection": "close",
       "content-type": "text/plain",
