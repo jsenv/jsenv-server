@@ -42,8 +42,6 @@ import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
 
-const STATUS_TEXT_INTERNAL_ERROR = "Internal error"
-
 export const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
@@ -60,8 +58,8 @@ export const startServer = async ({
   stopOnSIGINT = true,
   // auto close the server when the process exits
   stopOnExit = true,
-  // auto close when server respond with a 500
-  stopOnInternalError = false,
+  // auto close when requestToResponse throw an error
+  stopOnInternalError = true,
   // auto close the server when an uncaughtException happens
   stopOnCrash = false,
   keepProcessAlive = true,
@@ -281,8 +279,11 @@ ${request.method} ${request.origin}${request.ressource}`)
         logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`)
         if (
           stopOnInternalError &&
-          response.statusCode === 500 &&
-          response.statusText === STATUS_TEXT_INTERNAL_ERROR
+          // stopOnInternalError stops server only if requestToResponse generated
+          // a non controlled error (internal error).
+          // if requestToResponse gracefully produced a 500 response (it did not throw)
+          // then we can assume we are still in control of what we are doing
+          error
         ) {
           stop(STOP_REASON_INTERNAL_ERROR)
         }
@@ -361,7 +362,6 @@ ${request.method} ${request.origin}${request.ressource}`)
           response: composeResponse(
             responsePropertiesToResponse({
               status: 500,
-              statusText: STATUS_TEXT_INTERNAL_ERROR,
               headers: {
                 // ensure error are not cached
                 "cache-control": "no-store",
