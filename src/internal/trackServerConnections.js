@@ -1,4 +1,4 @@
-export const trackConnections = (nodeServer, { onConnectionError }) => {
+export const trackServerConnections = (nodeServer, { onConnectionError }) => {
   const connections = new Set()
 
   const connectionListener = (connection) => {

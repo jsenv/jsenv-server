@@ -1,4 +1,4 @@
-export const trackRequestHandlers = (nodeServer) => {
+export const trackServerRequestHandlers = (nodeServer) => {
   const requestHandlers = []
   const add = (handler) => {
     requestHandlers.push(handler)

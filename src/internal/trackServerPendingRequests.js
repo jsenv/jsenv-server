@@ -1,22 +1,22 @@
-export const trackClients = (nodeServer) => {
-  const clients = new Set()
+export const trackServerPendingRequests = (nodeServer) => {
+  const pendingClients = new Set()
 
-  const clientListener = (nodeRequest, nodeResponse) => {
+  const requestListener = (nodeRequest, nodeResponse) => {
     const client = { nodeRequest, nodeResponse }
 
-    clients.add(client)
+    pendingClients.add(client)
     nodeResponse.on("finish", () => {
-      clients.delete(client)
+      pendingClients.delete(client)
     })
   }
 
-  nodeServer.on("request", clientListener)
+  nodeServer.on("request", requestListener)
 
   const stop = ({ status, reason }) => {
-    nodeServer.removeListener("request", clientListener)
+    nodeServer.removeListener("request", requestListener)
 
     return Promise.all(
-      Array.from(clients).map(({ nodeResponse }) => {
+      Array.from(pendingClients).map(({ nodeResponse }) => {
         if (nodeResponse.headersSent === false) {
           nodeResponse.writeHead(status, reason)
         }
