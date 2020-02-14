@@ -18,9 +18,9 @@ import { urlToOrigin } from "./internal/urlToOrigin.js"
 import { createServer } from "./internal/createServer.js"
 import { trackServerPendingSessions } from "./internal/trackServerPendingSessions.js"
 import { trackServerPendingStreams } from "./internal/trackServerPendingStreams.js"
+import { populateHttp2Stream } from "./internal/populateHttp2Stream.js"
 import { trackServerPendingConnections } from "./internal/trackServerPendingConnections.js"
 import { trackServerPendingRequests } from "./internal/trackServerPendingRequests.js"
-import { trackServerRequestHandlers } from "./internal/trackServerRequestHandlers.js"
 import { nodeRequestToRequest } from "./internal/nodeRequestToRequest.js"
 import { composeResponseHeaders } from "./internal/composeResponseHeaders.js"
 import { populateNodeResponse } from "./internal/populateNodeResponse.js"
@@ -40,6 +40,7 @@ import {
 import { jsenvAccessControlAllowedHeaders } from "./jsenvAccessControlAllowedHeaders.js"
 import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMethods.js"
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
+import { streamDataToRequest } from "./internal/streamDataToRequest.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -238,6 +239,28 @@ export const startServer = async ({
           reason,
         })
       })
+
+      const streamCallback = async (stream, headers, flags) => {
+        const request = streamDataToRequest(
+          { stream, headers, flags },
+          { serverCancellationToken, serverOrigin },
+        )
+        stream.on("error", (error) => {
+          logger.error(`error on stream.
+--- stream path ---
+${request.ressource}
+--- error stack ---
+${error}`)
+        })
+        const response = await getResponse(request)
+        populateHttp2Stream(stream, response)
+      }
+
+      nodeServer.on("stream", streamCallback)
+      // ensure we don't try to handle new streams while server is stopping
+      registerCleanupCallback(() => {
+        nodeServer.removeListener("request", streamCallback)
+      })
     } else {
       const connectionsTracker = trackServerPendingConnections(nodeServer, {
         onConnectionError: onError,
@@ -254,57 +277,25 @@ export const startServer = async ({
         })
       })
 
-      const requestHandlerTracker = trackServerRequestHandlers(nodeServer)
-      // ensure we don't try to handle request while server is stopping
-      registerCleanupCallback(requestHandlerTracker.stop)
-
-      requestHandlerTracker.add(async (nodeRequest, nodeResponse) => {
+      const requestCallback = async (nodeRequest, nodeResponse) => {
+        const request = nodeRequestToRequest(nodeRequest, { serverCancellationToken, serverOrigin })
         nodeRequest.on("error", (error) => {
           logger.error(`error on request.
---- request url ---
-${nodeRequest.url}
+--- request ressource ---
+${request.ressource}
 --- error stack ---
 ${error}`)
         })
-
-        const { request, response, error } = await generateResponseDescription(
-          nodeRequestToRequest(nodeRequest, { serverCancellationToken, serverOrigin }),
-        )
-
-        if (
-          request.method !== "HEAD" &&
-          response.headers["content-length"] > 0 &&
-          response.body === ""
-        ) {
-          logger.error(
-            createContentLengthMismatchError(
-              `content-length header is ${response.headers["content-length"]} but body is empty`,
-            ),
-          )
-        }
-
-        logger.info(`${request.method} ${request.origin}${request.ressource}`)
-        if (error) {
-          logger.error(`internal error while handling request.
---- error stack ---
-${error.stack}
---- request ---
-${request.method} ${request.origin}${request.ressource}`)
-        }
-        logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`)
-        if (
-          stopOnInternalError &&
-          // stopOnInternalError stops server only if requestToResponse generated
-          // a non controlled error (internal error).
-          // if requestToResponse gracefully produced a 500 response (it did not throw)
-          // then we can assume we are still in control of what we are doing
-          error
-        ) {
-          stop(STOP_REASON_INTERNAL_ERROR)
-        }
+        const response = await getResponse(request)
         populateNodeResponse(nodeResponse, response, {
           ignoreBody: request.method === "HEAD",
         })
+      }
+
+      nodeServer.on("request", requestCallback)
+      // ensure we don't try to handle new requests while server is stopping
+      registerCleanupCallback(() => {
+        nodeServer.removeListener("request", requestCallback)
       })
     }
 
@@ -313,6 +304,46 @@ ${request.method} ${request.origin}${request.ressource}`)
 
     const corsEnabled = accessControlAllowRequestOrigin || accessControlAllowedOrigins.length
     // here we check access control options to throw or warn if we find strange values
+
+    const getResponse = async (request) => {
+      const { response, error } = await generateResponseDescription(request)
+
+      if (
+        request.method !== "HEAD" &&
+        response.headers["content-length"] > 0 &&
+        response.body === ""
+      ) {
+        logger.error(
+          createContentLengthMismatchError(
+            `content-length header is ${response.headers["content-length"]} but body is empty`,
+          ),
+        )
+      }
+
+      logger.info(`${request.method} ${request.origin}${request.ressource}`)
+      if (error) {
+        logger.error(`internal error while handling request.
+--- error stack ---
+${error.stack}
+--- request ---
+${request.method} ${request.origin}${request.ressource}`)
+      }
+      logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`)
+
+      if (
+        stopOnInternalError &&
+        // stopOnInternalError stops server only if requestToResponse generated
+        // a non controlled error (internal error).
+        // if requestToResponse gracefully produced a 500 response (it did not throw)
+        // then we can assume we are still in control of what we are doing
+        error
+      ) {
+        // il faudrais pouvoir stop que les autres response ?
+        setTimeout(() => stop(STOP_REASON_INTERNAL_ERROR))
+      }
+
+      return response
+    }
 
     const generateResponseDescription = async (request) => {
       const responsePropertiesToResponse = ({
@@ -356,7 +387,6 @@ ${request.method} ${request.origin}${request.ressource}`)
       try {
         if (corsEnabled && request.method === "OPTIONS") {
           return {
-            request,
             response: responsePropertiesToResponse({
               status: 200,
               headers: {
@@ -368,12 +398,10 @@ ${request.method} ${request.origin}${request.ressource}`)
 
         const responseProperties = await requestToResponse(request)
         return {
-          request,
           response: responsePropertiesToResponse(responseProperties || {}),
         }
       } catch (error) {
         return {
-          request,
           response: composeResponse(
             responsePropertiesToResponse({
               status: 500,
