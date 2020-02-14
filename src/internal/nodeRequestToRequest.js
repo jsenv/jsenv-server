@@ -4,7 +4,7 @@ import { headersFromObject } from "./headersFromObject.js"
 
 export const nodeRequestToRequest = (nodeRequest, { serverCancellationToken, serverOrigin }) => {
   const { method } = nodeRequest
-  const { url: ressource } = nodeRequest.url
+  const { url: ressource } = nodeRequest
   const headers = headersFromObject(nodeRequest.headers)
   const body =
     method === "POST" || method === "PUT" || method === "PATCH"

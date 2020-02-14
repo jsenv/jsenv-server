@@ -15,6 +15,7 @@ export const streamDataToRequest = (
 ) => {
   const method = headers[HTTP2_HEADER_METHOD]
   const ressource = headers[HTTP2_HEADER_PATH]
+
   headers = headersFromObject(headers)
   const body =
     method === "POST" || method === "PUT" || method === "PATCH"

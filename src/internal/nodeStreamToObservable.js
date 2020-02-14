@@ -13,14 +13,14 @@ export const nodeStreamToObservable = (nodeStream) => {
         nodeStream.removeListener("error", error)
         nodeStream.removeListener("end", complete)
 
-        if (nodeStreamIsNodeRequest(nodeStream)) {
+        if (typeof nodeStream.abort === "function") {
           nodeStream.abort()
         } else {
           nodeStream.destroy()
         }
       }
 
-      if (nodeStreamIsNodeRequest(nodeStream)) {
+      if (typeof nodeStream.once === "function") {
         nodeStream.once("abort", unsubscribe)
       }
 
@@ -30,6 +30,3 @@ export const nodeStreamToObservable = (nodeStream) => {
     },
   })
 }
-
-const nodeStreamIsNodeRequest = (nodeStream) =>
-  "abort" in nodeStream && "flushHeaders" in nodeStream

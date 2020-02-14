@@ -6,7 +6,7 @@ import { valueToObservable } from "./valueToObservable.js"
 export const populateNodeResponse = (
   nodeResponse,
   { status, statusText, headers, body, bodyEncoding },
-  { ignoreBody },
+  { ignoreBody } = {},
 ) => {
   const nodeHeaders = headersToNodeHeaders(headers)
   // nodejs strange signature for writeHead force this

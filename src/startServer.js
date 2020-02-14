@@ -225,7 +225,12 @@ export const startServer = async ({
     status = "opened"
     const serverOrigin = originAsString({ protocol, ip, port })
 
-    if (http2) {
+    // it kinda works but if you reload a browser page
+    // you got a WRITE_AFTER_END error on the http2Stream instance
+    // as if it was reused after being ended, don't know why
+    // for now we disable it and count on https://nodejs.org/api/http2.html#http2_compatibility_api
+    // eslint-disable-next-line no-constant-condition
+    if (http2 && false) {
       const sessionsTracker = trackServerPendingSessions(nodeServer, {
         onSessionError: onError,
       })
@@ -250,10 +255,12 @@ export const startServer = async ({
 --- stream path ---
 ${request.ressource}
 --- error stack ---
-${error}`)
+${error.stack}`)
         })
         const response = await getResponse(request)
-        populateHttp2Stream(stream, response)
+        populateHttp2Stream(stream, response, {
+          ignoreBody: request.method === "HEAD",
+        })
       }
 
       nodeServer.on("stream", streamCallback)
@@ -284,7 +291,7 @@ ${error}`)
 --- request ressource ---
 ${request.ressource}
 --- error stack ---
-${error}`)
+${error.stack}`)
         })
         const response = await getResponse(request)
         populateNodeResponse(nodeResponse, response, {

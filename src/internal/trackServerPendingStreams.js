@@ -1,3 +1,7 @@
+import { constants } from "http2"
+
+const { NGHTTP2_NO_ERROR } = constants
+
 export const trackServerPendingStreams = (nodeServer) => {
   const pendingClients = new Set()
 
@@ -28,7 +32,7 @@ export const trackServerPendingStreams = (nodeServer) => {
           if (http2Stream.closed) {
             resolve()
           } else {
-            http2Stream.close((error) => {
+            http2Stream.close(NGHTTP2_NO_ERROR, (error) => {
               if (error) {
                 reject(error)
               } else {

@@ -1,3 +1,3 @@
 import value from "./dependency.js"
 
-export default value
+window.ask = () => value

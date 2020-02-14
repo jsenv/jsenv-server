@@ -10,6 +10,10 @@ export const headersFromObject = (headersObject) => {
   const headers = {}
 
   Object.keys(headersObject).forEach((headerName) => {
+    if (headerName[0] === ":") {
+      // exclude http2 headers
+      return
+    }
     headers[normalizeHeaderName(headerName)] = normalizeHeaderValue(headersObject[headerName])
   })
 

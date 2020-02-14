@@ -12,7 +12,7 @@ export const populateHttp2Stream = (
     body,
     bodyEncoding,
   },
-  { ignoreBody },
+  { ignoreBody } = {},
 ) => {
   const nodeHeaders = {
     ...headersToNodeHeaders(headers),
@@ -32,17 +32,18 @@ export const populateHttp2Stream = (
   const observable = bodyToObservable(body)
   const subscription = subscribe(observable, {
     next: (data) => {
-      http2Stream.write(data)
+      http2Stream.end(data)
     },
     error: (value) => {
       http2Stream.emit("error", value)
     },
     complete: () => {
-      http2Stream.end()
+      // https://nodejs.org/api/http2.html#http2_http2stream_respond_headers_options
+      http2Stream.destroy()
     },
   })
   http2Stream.once("close", () => {
-    // close body in case nodeResponse is prematurely closed
+    // close body in case prematurely closed
     // while body is writing
     // it may happen in case of server sent event
     // where body is kept open to write to client
