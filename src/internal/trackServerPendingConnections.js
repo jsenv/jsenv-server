@@ -1,12 +1,12 @@
-export const trackServerConnections = (nodeServer, { onConnectionError }) => {
-  const connections = new Set()
+export const trackServerPendingConnections = (nodeServer, { onConnectionError }) => {
+  const pendingConnections = new Set()
 
   const connectionListener = (connection) => {
     connection.on("close", () => {
-      connections.delete(connection)
+      pendingConnections.delete(connection)
     })
     connection.on("error", onConnectionError)
-    connections.add(connection)
+    pendingConnections.add(connection)
   }
 
   nodeServer.on("connection", connectionListener)
@@ -15,9 +15,9 @@ export const trackServerConnections = (nodeServer, { onConnectionError }) => {
     nodeServer.removeListener("connection", connectionListener)
 
     await Promise.all(
-      Array.from(connections).map((connection) => {
+      Array.from(pendingConnections).map((pendingConnection) => {
         return new Promise((resolve, reject) => {
-          connection.destroy(reason, (error) => {
+          pendingConnection.close((error) => {
             if (error) {
               if (error === reason || error.code === "ENOTCONN") {
                 resolve()

@@ -16,7 +16,9 @@ import { createLogger } from "@jsenv/logger"
 import { createTracker } from "./internal/createTracker.js"
 import { urlToOrigin } from "./internal/urlToOrigin.js"
 import { createServer } from "./internal/createServer.js"
-import { trackServerConnections } from "./internal/trackServerConnections.js"
+import { trackServerPendingSessions } from "./internal/trackServerPendingSessions.js"
+import { trackServerPendingStreams } from "./internal/trackServerPendingStreams.js"
+import { trackServerPendingConnections } from "./internal/trackServerPendingConnections.js"
 import { trackServerPendingRequests } from "./internal/trackServerPendingRequests.js"
 import { trackServerRequestHandlers } from "./internal/trackServerRequestHandlers.js"
 import { nodeRequestToRequest } from "./internal/nodeRequestToRequest.js"
@@ -223,8 +225,21 @@ export const startServer = async ({
     const serverOrigin = originAsString({ protocol, ip, port })
 
     if (http2) {
+      const sessionsTracker = trackServerPendingSessions(nodeServer, {
+        onSessionError: onError,
+      })
+      registerCleanupCallback(sessionsTracker.stop)
+
+      const pendingStreamsTracker = trackServerPendingStreams(nodeServer)
+      // ensure pending requests got a response from the server
+      registerCleanupCallback((reason) => {
+        pendingStreamsTracker.stop({
+          status: reason === STOP_REASON_INTERNAL_ERROR ? 500 : 503,
+          reason,
+        })
+      })
     } else {
-      const connectionsTracker = trackServerConnections(nodeServer, {
+      const connectionsTracker = trackServerPendingConnections(nodeServer, {
         onConnectionError: onError,
       })
       // opened connection must be shutdown before the close event is emitted

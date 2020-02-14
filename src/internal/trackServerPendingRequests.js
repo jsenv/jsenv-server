@@ -5,7 +5,7 @@ export const trackServerPendingRequests = (nodeServer) => {
     const client = { nodeRequest, nodeResponse }
 
     pendingClients.add(client)
-    nodeResponse.on("finish", () => {
+    nodeResponse.on("close", () => {
       pendingClients.delete(client)
     })
   }
@@ -21,13 +21,17 @@ export const trackServerPendingRequests = (nodeServer) => {
           nodeResponse.writeHead(status, reason)
         }
 
-        return new Promise((resolve) => {
-          if (nodeResponse.finished) {
+        return new Promise((resolve, reject) => {
+          if (nodeResponse.closed) {
             resolve()
           } else {
-            nodeResponse.on("finish", resolve)
-            nodeResponse.on("error", resolve)
-            nodeResponse.destroy(reason)
+            nodeResponse.close((error) => {
+              if (error) {
+                reject(error)
+              } else {
+                resolve()
+              }
+            })
           }
         })
       }),

@@ -3,8 +3,8 @@ import { nodeStreamToObservable } from "./nodeStreamToObservable.js"
 import { headersFromObject } from "./headersFromObject.js"
 
 export const nodeRequestToRequest = (nodeRequest, { serverCancellationToken, serverOrigin }) => {
-  const ressource = nodeRequest.url
   const { method } = nodeRequest
+  const { url: ressource } = nodeRequest.url
   const headers = headersFromObject(nodeRequest.headers)
   const body =
     method === "POST" || method === "PUT" || method === "PATCH"
@@ -31,7 +31,7 @@ export const nodeRequestToRequest = (nodeRequest, { serverCancellationToken, ser
 const nodeRequestToCancellationToken = (nodeRequest) => {
   const { cancel, token } = createCancellationSource()
   nodeRequest.on("abort", () => {
-    cancel()
+    cancel("request aborted")
   })
   return token
 }
