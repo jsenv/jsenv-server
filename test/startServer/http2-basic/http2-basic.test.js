@@ -19,7 +19,8 @@ const http2Server = await startServer({
   },
 })
 const browser = await puppeteer.launch({
-  headless: false,
+  ignoreHTTPSErrors: true,
+  // headless: false
 })
 const page = await browser.newPage()
 await page.goto(`${http2Server.origin}/index.html`)
