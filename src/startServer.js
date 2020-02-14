@@ -1,7 +1,7 @@
 /* eslint-disable import/max-dependencies */
-import { createServer as createNodeServer, STATUS_CODES } from "http"
-import { createServer as createNodeSecureServer, Agent as SecureAgent } from "https"
+
 import { createRequire } from "module"
+import { STATUS_CODES } from "http"
 import {
   createCancellationToken,
   createOperation,
@@ -14,6 +14,7 @@ import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-
 import { memoize } from "@jsenv/util"
 import { createLogger } from "@jsenv/logger"
 import { urlToOrigin } from "./internal/urlToOrigin.js"
+import { createServer } from "./internal/createServer.js"
 import { trackConnections } from "./internal/trackConnections.js"
 import { trackClients } from "./internal/trackClients.js"
 import { trackRequestHandlers } from "./internal/trackRequestHandlers.js"
@@ -46,6 +47,7 @@ export const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
   serverName = "server",
+  http2 = false,
 
   protocol = "http",
   ip = "127.0.0.1",
@@ -105,6 +107,20 @@ export const startServer = async ({
   if (ip === "0.0.0.0" && process.platform === "win32") {
     throw new Error(`listening ${ip} not available on window`)
   }
+  if (protocol === "https") {
+    if (!privateKey) {
+      throw new Error(`missing privateKey for https server`)
+    }
+    if (!certificate) {
+      throw new Error(`missing certificate for https server`)
+    }
+    if (privateKey !== jsenvPrivateKey && certificate === jsenvCertificate) {
+      throw new Error(`you passed a privateKey without certificate`)
+    }
+    if (certificate !== jsenvCertificate && privateKey === jsenvPrivateKey) {
+      throw new Error(`you passed a certificate without privateKey`)
+    }
+  }
 
   const logger = createLogger({ logLevel })
 
@@ -150,7 +166,7 @@ export const startServer = async ({
     })
   }
 
-  const { nodeServer, agent } = getNodeServerAndAgent({ protocol, privateKey, certificate })
+  const nodeServer = await createServer({ http2, protocol, privateKey, certificate })
 
   // https://nodejs.org/api/net.html#net_server_unref
   if (!keepProcessAlive) {
@@ -363,8 +379,6 @@ ${request.method} ${request.origin}${request.ressource}`)
     getStatus: () => status,
     origin,
     nodeServer,
-    // TODO: remove agent
-    agent,
     stop,
     stoppedPromise,
   }
@@ -389,42 +403,6 @@ callback: ${callback}`)
 }
 
 const statusToStatusText = (status) => STATUS_CODES[status] || "not specified"
-
-const getNodeServerAndAgent = ({ protocol, privateKey, certificate }) => {
-  if (protocol === "http") {
-    return {
-      nodeServer: createNodeServer(),
-      agent: global.Agent,
-    }
-  }
-
-  if (protocol === "https") {
-    if (!privateKey) {
-      throw new Error(`missing privateKey for https server`)
-    }
-    if (!certificate) {
-      throw new Error(`missing certificate for https server`)
-    }
-    if (privateKey !== jsenvPrivateKey && certificate === jsenvCertificate) {
-      throw new Error(`you passed a privateKey without certificate`)
-    }
-    if (certificate !== jsenvCertificate && privateKey === jsenvPrivateKey) {
-      throw new Error(`you passed a certificate without privateKey`)
-    }
-
-    return {
-      nodeServer: createNodeSecureServer({
-        key: privateKey,
-        cert: certificate,
-      }),
-      agent: new SecureAgent({
-        rejectUnauthorized: false, // allow self signed certificate
-      }),
-    }
-  }
-
-  throw new Error(`unsupported protocol ${protocol}`)
-}
 
 const createContentLengthMismatchError = (message) => {
   const error = new Error(message)
