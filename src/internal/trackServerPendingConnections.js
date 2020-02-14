@@ -17,7 +17,7 @@ export const trackServerPendingConnections = (nodeServer, { onConnectionError })
     await Promise.all(
       Array.from(pendingConnections).map((pendingConnection) => {
         return new Promise((resolve, reject) => {
-          pendingConnection.close((error) => {
+          pendingConnection.destroy(reason, (error) => {
             if (error) {
               if (error === reason || error.code === "ENOTCONN") {
                 resolve()
