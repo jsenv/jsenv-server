@@ -1,4 +1,4 @@
-export const createServer = async ({ http2, protocol, privateKey, certificate }) => {
+export const createServer = async ({ http2, http1Allowed, protocol, privateKey, certificate }) => {
   if (protocol === "http") {
     if (http2) {
       const { createServer } = await import("http2")
@@ -15,6 +15,7 @@ export const createServer = async ({ http2, protocol, privateKey, certificate })
       return createSecureServer({
         key: privateKey,
         cert: certificate,
+        allowHTTP1: http1Allowed,
       })
     }
 

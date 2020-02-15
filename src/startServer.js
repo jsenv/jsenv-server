@@ -16,9 +16,6 @@ import { createLogger } from "@jsenv/logger"
 import { createTracker } from "./internal/createTracker.js"
 import { urlToOrigin } from "./internal/urlToOrigin.js"
 import { createServer } from "./internal/createServer.js"
-import { trackServerPendingSessions } from "./internal/trackServerPendingSessions.js"
-import { trackServerPendingStreams } from "./internal/trackServerPendingStreams.js"
-import { populateHttp2Stream } from "./internal/populateHttp2Stream.js"
 import { trackServerPendingConnections } from "./internal/trackServerPendingConnections.js"
 import { trackServerPendingRequests } from "./internal/trackServerPendingRequests.js"
 import { nodeRequestToRequest } from "./internal/nodeRequestToRequest.js"
@@ -40,7 +37,6 @@ import {
 import { jsenvAccessControlAllowedHeaders } from "./jsenvAccessControlAllowedHeaders.js"
 import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMethods.js"
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
-import { streamDataToRequest } from "./internal/streamDataToRequest.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -49,7 +45,8 @@ export const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
   serverName = "server",
-  http2 = false,
+  http2 = true,
+  http1Allowed = true,
 
   protocol = "http",
   ip = "127.0.0.1",
@@ -184,7 +181,13 @@ export const startServer = async ({
       })
     }
 
-    const nodeServer = await createServer({ http2, protocol, privateKey, certificate })
+    const nodeServer = await createServer({
+      http2,
+      http1Allowed,
+      protocol,
+      privateKey,
+      certificate,
+    })
 
     // https://nodejs.org/api/net.html#net_server_unref
     if (!keepProcessAlive) {
@@ -225,86 +228,41 @@ export const startServer = async ({
     status = "opened"
     const serverOrigin = originAsString({ protocol, ip, port })
 
-    // it kinda works but if you reload a browser page
-    // you got a WRITE_AFTER_END error on the http2Stream instance
-    // as if it was reused after being ended, don't know why
-    // for now we disable it and count on https://nodejs.org/api/http2.html#http2_compatibility_api
-    // eslint-disable-next-line no-constant-condition
-    if (http2 && false) {
-      const sessionsTracker = trackServerPendingSessions(nodeServer, {
-        onSessionError: onError,
-      })
-      registerCleanupCallback(sessionsTracker.stop)
+    const connectionsTracker = trackServerPendingConnections(nodeServer, {
+      onConnectionError: onError,
+    })
+    // opened connection must be shutdown before the close event is emitted
+    registerCleanupCallback(connectionsTracker.stop)
 
-      const pendingStreamsTracker = trackServerPendingStreams(nodeServer)
-      // ensure pending requests got a response from the server
-      registerCleanupCallback((reason) => {
-        pendingStreamsTracker.stop({
-          status: reason === STOP_REASON_INTERNAL_ERROR ? 500 : 503,
-          reason,
-        })
+    const pendingRequestsTracker = trackServerPendingRequests(nodeServer)
+    // ensure pending requests got a response from the server
+    registerCleanupCallback((reason) => {
+      pendingRequestsTracker.stop({
+        status: reason === STOP_REASON_INTERNAL_ERROR ? 500 : 503,
+        reason,
       })
+    })
 
-      const streamCallback = async (stream, headers, flags) => {
-        const request = streamDataToRequest(
-          { stream, headers, flags },
-          { serverCancellationToken, serverOrigin },
-        )
-        stream.on("error", (error) => {
-          logger.error(`error on stream.
---- stream path ---
-${request.ressource}
---- error stack ---
-${error.stack}`)
-        })
-        const response = await getResponse(request)
-        populateHttp2Stream(stream, response, {
-          ignoreBody: request.method === "HEAD",
-        })
-      }
-
-      nodeServer.on("stream", streamCallback)
-      // ensure we don't try to handle new streams while server is stopping
-      registerCleanupCallback(() => {
-        nodeServer.removeListener("request", streamCallback)
-      })
-    } else {
-      const connectionsTracker = trackServerPendingConnections(nodeServer, {
-        onConnectionError: onError,
-      })
-      // opened connection must be shutdown before the close event is emitted
-      registerCleanupCallback(connectionsTracker.stop)
-
-      const pendingRequestsTracker = trackServerPendingRequests(nodeServer)
-      // ensure pending requests got a response from the server
-      registerCleanupCallback((reason) => {
-        pendingRequestsTracker.stop({
-          status: reason === STOP_REASON_INTERNAL_ERROR ? 500 : 503,
-          reason,
-        })
-      })
-
-      const requestCallback = async (nodeRequest, nodeResponse) => {
-        const request = nodeRequestToRequest(nodeRequest, { serverCancellationToken, serverOrigin })
-        nodeRequest.on("error", (error) => {
-          logger.error(`error on request.
+    const requestCallback = async (nodeRequest, nodeResponse) => {
+      const request = nodeRequestToRequest(nodeRequest, { serverCancellationToken, serverOrigin })
+      nodeRequest.on("error", (error) => {
+        logger.error(`error on request.
 --- request ressource ---
 ${request.ressource}
 --- error stack ---
 ${error.stack}`)
-        })
-        const response = await getResponse(request)
-        populateNodeResponse(nodeResponse, response, {
-          ignoreBody: request.method === "HEAD",
-        })
-      }
-
-      nodeServer.on("request", requestCallback)
-      // ensure we don't try to handle new requests while server is stopping
-      registerCleanupCallback(() => {
-        nodeServer.removeListener("request", requestCallback)
+      })
+      const response = await getResponse(request)
+      populateNodeResponse(nodeResponse, response, {
+        ignoreBody: request.method === "HEAD",
       })
     }
+
+    nodeServer.on("request", requestCallback)
+    // ensure we don't try to handle new requests while server is stopping
+    registerCleanupCallback(() => {
+      nodeServer.removeListener("request", requestCallback)
+    })
 
     logger.info(`${serverName} started at ${serverOrigin}`)
     startedCallback({ origin: serverOrigin })
