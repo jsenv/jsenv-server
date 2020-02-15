@@ -45,10 +45,10 @@ export const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
   serverName = "server",
-  http2 = true,
-  http1Allowed = true,
 
   protocol = "http",
+  http2 = protocol === "https",
+  http1Allowed = true,
   ip = "127.0.0.1",
   port = 0, // assign a random available port
   forcePort = false,
@@ -255,6 +255,8 @@ ${error.stack}`)
       const response = await getResponse(request)
       populateNodeResponse(nodeResponse, response, {
         ignoreBody: request.method === "HEAD",
+        // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L97
+        ignoreStatusTest: Boolean(nodeRequest.stream),
       })
     }
 

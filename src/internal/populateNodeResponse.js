@@ -6,12 +6,12 @@ import { valueToObservable } from "./valueToObservable.js"
 export const populateNodeResponse = (
   nodeResponse,
   { status, statusText, headers, body, bodyEncoding },
-  { ignoreBody } = {},
+  { ignoreBody, ignoreStatusTest } = {},
 ) => {
   const nodeHeaders = headersToNodeHeaders(headers)
   // nodejs strange signature for writeHead force this
   // https://nodejs.org/api/http.html#http_response_writehead_statuscode_statusmessage_headers
-  if (statusText === undefined) {
+  if (statusText === undefined || ignoreStatusTest) {
     nodeResponse.writeHead(status, nodeHeaders)
   } else {
     nodeResponse.writeHead(status, statusText, nodeHeaders)

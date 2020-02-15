@@ -2,7 +2,7 @@ import { resolveUrl, readFile } from "@jsenv/util"
 import { assert } from "@jsenv/assert"
 import { serveFile } from "../../index.js"
 
-const isWindows = process.platform === "win32"
+// const isWindows = process.platform === "win32"
 const testDirectoryUrl = resolveUrl("./", import.meta.url)
 const sourceUrl = resolveUrl("./file.js?ok=true", testDirectoryUrl)
 
@@ -15,7 +15,7 @@ const expected = {
   headers: {
     "content-length": sourceBuffer.length,
     "content-type": "application/javascript",
-    "etag": isWindows ? `"21-e74mfbSm2jDnInr5kHyIm6jWsXI"` : `"20-cXagzQt5IlWM1Fc0XXcmMtPeNKo"`,
+    "etag": `"20-cXagzQt5IlWM1Fc0XXcmMtPeNKo"`,
   },
   body: sourceBuffer,
 }

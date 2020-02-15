@@ -9,10 +9,10 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 const puppeteer = require("puppeteer")
 
 const http2Server = await startServer({
+  logLevel: "warn",
   keepProcessAlive: false,
   protocol: "https",
   port: 3456,
-  http2: true,
   requestToResponse: (request) => {
     const fileUrl = resolveUrl(request.ressource.slice(1), testDirectoryUrl)
     return serveFile(fileUrl, request)
@@ -20,7 +20,7 @@ const http2Server = await startServer({
 })
 const browser = await puppeteer.launch({
   ignoreHTTPSErrors: true,
-  // headless: false
+  // headless: false,
 })
 const page = await browser.newPage()
 await page.goto(`${http2Server.origin}/index.html`)
