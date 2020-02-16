@@ -15,6 +15,7 @@ High level api for node.js server.
   - [startServer](./docs/start-server.md)
   - [firstService](./docs/first-service.md)
   - [serveFile](./docs/serve-file.md)
+  - [fetchUrl](./docs/fetch-url.md)
 
 # Presentation
 
@@ -50,7 +51,7 @@ const { startServer } = require("@jsenv/server")
 # Installation
 
 ```console
-npm install @jsenv/server@1.6.1
+npm install @jsenv/server@2.0.0
 ```
 
 # Documentation
@@ -60,3 +61,4 @@ Api can be found in their own pages
 - [startServer](./docs/start-server.md)
 - [firstService](./docs/first-service.md)
 - [serveFile](./docs/serve-file.md)
+- [fetchUrl](./docs/fetch-url.md)
