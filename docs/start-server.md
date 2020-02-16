@@ -2,8 +2,11 @@
 
 - [startServer example](#startServer-example)
 - [startServer parameters](#startServer-parameters)
+  - [http2](#http2)
+  - [http1Allowed](#http1Allowed)
   - [protocol](#protocol)
-    - [https protocol](#https-protocol)
+  - [privateKey](#privateKey)
+  - [certificate](#certificate)
   - [ip](#ip)
   - [port](#port)
   - [forcePort](#forcePort)
@@ -50,9 +53,19 @@ const server = await startServer({
 
 # startServer parameters
 
+## http2
+
+`http2` parameter is a boolean controlling if server uses http2 or http1. This parameter is optional and enabled by default when server protocol is `"https"`. Otherwise it is disabled.
+
+## http1Allowed
+
+`http1Allowed` parameter is a boolean controlling if server accepts client requesting it using http1 even if server was started with http2 parameter enabled. This parameter is optional and enabled by default.
+
+— see [allowHTTP1 documentation on Node.js](https://nodejs.org/dist/latest-v13.x/docs/api/http2.html#http2_http2_createsecureserver_options_onrequesthandler)
+
 ## protocol
 
-`protocol` parameter is a string which ie either `"http"` or `"https"`. This parameter is optional with a default value of `"http"`.
+`protocol` parameter is a string which is either `"http"` or `"https"`. This parameter is optional with a default value of `"http"`.
 
 If you use `https` protocol a default self signed certificate will be used. It can be found inside [src/jsenvSignature.js](../src/jsenvSignature.js). You may want to add this certificate to your system/browser trusted certificates.
 
@@ -69,6 +82,14 @@ startServer({
   certificate: readFileSync(`${__dirname}/ssl/cert.pem`),
 })
 ```
+
+## privateKey
+
+`privateKey` parameter is a string containing a private key. This parameter is optionnal with a default value exported in [src/jsenvSignature.js](../src/jsenvSignature.js). This parameter will be used when protocol is `https`.
+
+## certificate
+
+`certificate` parameter is a string containing a certificate. This parameter is optionnal with a default value exported in [src/jsenvSignature.js](../src/jsenvSignature.js). This parameter will be used when protocol is `https`.
 
 ## ip
 
@@ -251,7 +272,7 @@ SIGINT occurs when you hit ctrl+c in your terminal for instance.
 
 ## stopOnInternalError
 
-`stopOnInternalError` parameter is a boolean controlling if server stops itself when `requestToResponse` produce a 500. This parameters is otional with a default value of `false`.
+`stopOnInternalError` parameter is a boolean controlling if server stops itself when `requestToResponse` throw an error. This parameter is optional and disabled by default.
 
 ## keepProcessAlive
 

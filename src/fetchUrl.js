@@ -1,6 +1,7 @@
 // https://github.com/node-fetch/node-fetch/blob/8c197f8982a238b3c345c64b17bfa92e16b4f7c4/src/response.js#L1
 
 import { createRequire } from "module"
+import { Agent } from "https"
 import { createCancellationToken } from "@jsenv/cancellation"
 import { serveFile } from "./serveFile.js"
 
@@ -15,6 +16,7 @@ export const fetchUrl = async (
   {
     cancellationToken = createCancellationToken(),
     simplified = false,
+    ignoreHttpsError = false,
     canReadDirectory,
     contentTypeMap,
     cacheStrategy,
@@ -57,6 +59,13 @@ export const fetchUrl = async (
   try {
     response = await nodeFetch(url, {
       signal: abortController.signal,
+      ...(ignoreHttpsError && url.startsWith("https")
+        ? {
+            agent: new Agent({
+              rejectUnauthorized: false,
+            }),
+          }
+        : {}),
       ...options,
     })
   } catch (e) {

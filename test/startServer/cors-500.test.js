@@ -29,7 +29,7 @@ const actual = await fetchUrl(server.origin, {
 const expected = {
   url: `${server.origin}/`,
   status: 500,
-  statusText: "Internal error",
+  statusText: "Internal Server Error",
   headers: {
     "access-control-allow-credentials": "true",
     "access-control-allow-headers": "x-requested-with, x-whatever",
