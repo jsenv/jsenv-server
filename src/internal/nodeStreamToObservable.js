@@ -3,7 +3,7 @@ import { createObservable } from "./observable.js"
 export const nodeStreamToObservable = (nodeStream) => {
   return createObservable({
     subscribe: ({ next, error, complete }) => {
-      // should we do nodeStream.resume() in case the stream was paused
+      // should we do nodeStream.resume() in case the stream was paused ?
       nodeStream.on("data", next)
       nodeStream.once("error", error)
       nodeStream.once("end", complete)
