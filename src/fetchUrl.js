@@ -46,6 +46,10 @@ export const fetchUrl = async (
     return simplified ? standardResponseToSimplifiedResponse(response) : response
   }
 
+  // cancellation might be requested early, abortController does not support that
+  // so we have to throw if requested right away
+  cancellationToken.throwIfRequested()
+
   // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
   const abortController = new AbortController()
 

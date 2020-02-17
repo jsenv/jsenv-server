@@ -252,28 +252,22 @@ ${request.ressource}
 --- error stack ---
 ${error.stack}`)
       })
-      const response = await getResponse(request)
-      populateNodeResponse(nodeResponse, response, {
-        ignoreBody: request.method === "HEAD",
-        // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L97
-        ignoreStatusText: Boolean(nodeRequest.stream),
-      })
-    }
 
-    nodeServer.on("request", requestCallback)
-    // ensure we don't try to handle new requests while server is stopping
-    registerCleanupCallback(() => {
-      nodeServer.removeListener("request", requestCallback)
-    })
-
-    logger.info(`${serverName} started at ${serverOrigin}`)
-    startedCallback({ origin: serverOrigin })
-
-    const corsEnabled = accessControlAllowRequestOrigin || accessControlAllowedOrigins.length
-    // here we check access control options to throw or warn if we find strange values
-
-    const getResponse = async (request) => {
       const { response, error } = await generateResponseDescription(request)
+
+      logger.info(`${request.method} ${request.origin}${request.ressource}`)
+
+      if (error && isCancelError(error) && internalCancellationToken.cancellationRequested) {
+        logger.info("ignored because server closing")
+        nodeResponse.destroy()
+        return
+      }
+
+      if (request.aborted) {
+        logger.info(`request aborted by client`)
+        nodeResponse.destroy()
+        return
+      }
 
       if (
         request.method !== "HEAD" &&
@@ -287,7 +281,6 @@ ${error.stack}`)
         )
       }
 
-      logger.info(`${request.method} ${request.origin}${request.ressource}`)
       if (error) {
         logger.error(`internal error while handling request.
 --- error stack ---
@@ -296,6 +289,13 @@ ${error.stack}
 ${request.method} ${request.origin}${request.ressource}`)
       }
       logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`)
+
+      populateNodeResponse(nodeResponse, response, {
+        cancellationToken: request.cancellationToken,
+        ignoreBody: request.method === "HEAD",
+        // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L97
+        ignoreStatusText: Boolean(nodeRequest.stream),
+      })
 
       if (
         stopOnInternalError &&
@@ -306,11 +306,21 @@ ${request.method} ${request.origin}${request.ressource}`)
         error
       ) {
         // il faudrais pouvoir stop que les autres response ?
-        setTimeout(() => stop(STOP_REASON_INTERNAL_ERROR))
+        stop(STOP_REASON_INTERNAL_ERROR)
       }
-
-      return response
     }
+
+    nodeServer.on("request", requestCallback)
+    // ensure we don't try to handle new requests while server is stopping
+    registerCleanupCallback(() => {
+      nodeServer.removeListener("request", requestCallback)
+    })
+
+    logger.info(`${serverName} started at ${serverOrigin}`)
+    startedCallback({ origin: serverOrigin })
+
+    const corsEnabled = accessControlAllowRequestOrigin || accessControlAllowedOrigins.length
+    // here we check access control options to throw or warn if we find strange values
 
     const generateResponseDescription = async (request) => {
       const responsePropertiesToResponse = ({

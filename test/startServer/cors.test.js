@@ -3,7 +3,7 @@ import { startServer, fetchUrl } from "../../index.js"
 
 const server = await startServer({
   protocol: "http",
-  logLevel: "off",
+  logLevel: "warn",
   cors: true,
   accessControlAllowRequestOrigin: true,
   accessControlAllowRequestMethod: true,

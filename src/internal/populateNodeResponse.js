@@ -6,7 +6,7 @@ import { valueToObservable } from "./valueToObservable.js"
 export const populateNodeResponse = (
   nodeResponse,
   { status, statusText, headers, body, bodyEncoding },
-  { ignoreBody, ignoreStatusText } = {},
+  { cancellationToken, ignoreBody, ignoreStatusText } = {},
 ) => {
   const nodeHeaders = headersToNodeHeaders(headers)
   // nodejs strange signature for writeHead force this
@@ -36,6 +36,11 @@ export const populateNodeResponse = (
     complete: () => {
       nodeResponse.end()
     },
+  })
+
+  cancellationToken.register(() => {
+    nodeResponse.destroy()
+    subscription.unsubscribe()
   })
   nodeResponse.once("close", () => {
     // close body in case nodeResponse is prematurely closed

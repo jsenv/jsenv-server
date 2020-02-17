@@ -26,7 +26,7 @@ export const subscribe = (
     error,
     complete,
   })
-  return subscription
+  return subscription || { unsubscribe: () => {} }
 }
 
 export const isObservable = (value) => {
