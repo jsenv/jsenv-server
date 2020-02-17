@@ -257,6 +257,12 @@ ${error.stack}`)
 
       logger.info(`${request.method} ${request.origin}${request.ressource}`)
 
+      if (error && isCancelError(error) && internalCancellationToken.cancellationRequested) {
+        logger.info("ignored because server closing")
+        nodeResponse.destroy()
+        return
+      }
+
       if (request.aborted) {
         logger.info(`request aborted by client`)
         nodeResponse.destroy()
