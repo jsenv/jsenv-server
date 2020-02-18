@@ -1,9 +1,10 @@
 import { assert } from "@jsenv/assert"
 import { startServer, fetchUrl } from "../../index.js"
 
-const { origin, stop } = await startServer({
-  logLevel: "off",
+const { origin } = await startServer({
+  logLevel: "warn",
   protocol: "http",
+  keepProcessAlive: false,
   ip: "",
   port: 8998,
   requestToResponse: () => {
@@ -21,7 +22,6 @@ const { origin, stop } = await startServer({
   const expected = "http://127.0.0.1:8998"
   assert({ actual, expected })
 }
-
 {
   const actual = await fetchUrl(origin, { simplified: true })
   const expected = {
@@ -38,5 +38,3 @@ const { origin, stop } = await startServer({
   }
   assert({ actual, expected })
 }
-
-stop()

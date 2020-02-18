@@ -108,9 +108,5 @@ const server = await startServer({
   const actual = await response.text()
   const expected = "Hello"
   assert({ actual, expected })
-  // cancellationSource.cancel("whatever")
+  cancellationSource.cancel("whatever")
 }
-
-// await new Promise((resolve) => {
-//   setTimeout(resolve, 100)
-// })
