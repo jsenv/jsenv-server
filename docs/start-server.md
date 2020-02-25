@@ -55,7 +55,7 @@ const server = await startServer({
 
 ## http2
 
-`http2` parameter is a boolean controlling if server uses http2 or http1. This parameter is optional and enabled by default when server protocol is `"https"`. Otherwise it is disabled.
+`http2` parameter is a boolean controlling if server uses http2 or http1. This parameter is optional and disabled by default.
 
 ## http1Allowed
 

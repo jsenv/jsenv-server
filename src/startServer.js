@@ -47,7 +47,7 @@ export const startServer = async ({
   serverName = "server",
 
   protocol = "http",
-  http2 = protocol === "https",
+  http2 = false,
   http1Allowed = true,
   ip = "127.0.0.1",
   port = 0, // assign a random available port
