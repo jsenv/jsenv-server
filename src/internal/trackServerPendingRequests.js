@@ -21,17 +21,32 @@ export const trackServerPendingRequests = (nodeServer) => {
           nodeResponse.writeHead(status, reason)
         }
 
-        return new Promise((resolve, reject) => {
-          if (nodeResponse.closed) {
+        // http2
+        if (nodeResponse.close) {
+          return new Promise((resolve, reject) => {
+            if (nodeResponse.closed) {
+              resolve()
+            } else {
+              nodeResponse.close((error) => {
+                if (error) {
+                  reject(error)
+                } else {
+                  resolve()
+                }
+              })
+            }
+          })
+        }
+
+        // http
+        return new Promise((resolve) => {
+          if (nodeResponse.destroyed) {
             resolve()
           } else {
-            nodeResponse.close((error) => {
-              if (error) {
-                reject(error)
-              } else {
-                resolve()
-              }
+            nodeResponse.once("close", () => {
+              resolve()
             })
+            nodeResponse.destroy()
           }
         })
       }),
