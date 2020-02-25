@@ -28,7 +28,22 @@ export const populateNodeResponse = (
   const observable = bodyToObservable(body)
   const subscription = subscribe(observable, {
     next: (data) => {
-      nodeResponse.write(data)
+      try {
+        nodeResponse.write(data)
+      } catch (e) {
+        // Something inside Node.js sometimes puts stream
+        // in a state where .write() throw despites nodeResponse.destroyed
+        // being undefined and "close" event not being emitted.
+        // I have tested if we are the one calling destroy
+        // (I have commented every .destroy() call)
+        // but issue still occurs
+        // For the record it's "hard" to reproduce but can be by running
+        // a lot of tests against a browser in the context of @jsenv/core testing
+        if (e.code === "ERR_HTTP2_INVALID_STREAM") {
+          return
+        }
+        throw e
+      }
     },
     error: (value) => {
       nodeResponse.emit("error", value)
@@ -39,8 +54,8 @@ export const populateNodeResponse = (
   })
 
   cancellationToken.register(() => {
-    nodeResponse.destroy()
     subscription.unsubscribe()
+    nodeResponse.destroy()
   })
   nodeResponse.once("close", () => {
     // close body in case nodeResponse is prematurely closed
