@@ -5,7 +5,11 @@ export const trackServerPendingConnections = (nodeServer, { onConnectionError })
     connection.on("close", () => {
       pendingConnections.delete(connection)
     })
-    connection.on("error", onConnectionError)
+    if (onConnectionError) {
+      connection.on("error", (error) => {
+        onConnectionError(error, connection)
+      })
+    }
     pendingConnections.add(connection)
   }
 

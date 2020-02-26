@@ -229,7 +229,11 @@ export const startServer = async ({
     const serverOrigin = originAsString({ protocol, ip, port })
 
     const connectionsTracker = trackServerPendingConnections(nodeServer, {
-      onConnectionError: onError,
+      onConnectionError: (error, connection) => {
+        if (!connection.destroyed) {
+          onError(error)
+        }
+      },
     })
     // opened connection must be shutdown before the close event is emitted
     registerCleanupCallback(connectionsTracker.stop)
