@@ -70,6 +70,14 @@ export const createSelfSignature = () => {
           type: 7, // IP
           ip: "127.0.0.1",
         },
+        {
+          type: 2,
+          value: "localhost",
+        },
+        {
+          type: 2,
+          value: "jsenv",
+        },
       ],
     },
   ]
