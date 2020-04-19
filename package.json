@@ -1,6 +1,6 @@
 {
 	"name": "@jsenv/server",
-	"version": "2.2.0",
+	"version": "2.3.0",
 	"description": "High level api for node.js server.",
 	"license": "MIT",
 	"repository": {
@@ -43,8 +43,7 @@
 		"dist": "npm run generate-commonjs-bundle",
 		"postinstall": "npm run generate-import-map && npm run install-git-hooks",
 		"prepublishOnly": "node ./script/transform-package/remove-postinstall.js && npm run dist",
-		"postpublish": "node ./script/transform-package/restore-postinstall.js",
-		"git-hook-pre-commit": "npm run prettier-format-stage"
+		"postpublish": "node ./script/transform-package/restore-postinstall.js"
 	},
 	"dependencies": {
 		"@jsenv/cancellation": "1.4.1",

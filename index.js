@@ -10,6 +10,7 @@ export { jsenvAccessControlAllowedMethods } from "./src/jsenvAccessControlAllowe
 export { jsenvPrivateKey, jsenvPublicKey, jsenvCertificate } from "./src/jsenvSignature.js"
 export { urlToContentType } from "./src/urlToContentType.js"
 export { urlToSearchParamValue } from "./src/urlToSearchParamValue.js"
+export { readRequestBodyAsString } from "./src/readRequestBodyAsString.js"
 export { serveFile } from "./src/serveFile.js"
 export { startServer } from "./src/startServer.js"
 export {

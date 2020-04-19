@@ -135,22 +135,9 @@ When underlying http request method is `POST`, `PUT`, `PATCH`, `request.body` is
 The following code snippet can be used to get `request.body` as string:
 
 ```js
-const readRequestBodyAsString = (requestBody) => {
-  return new Promise((resolve, reject) => {
-    const bufferArray = []
-    requestBody.subscribe({
-      error: reject,
-      next: (buffer) => {
-        bufferArray.push(buffer)
-      },
-      complete: () => {
-        const bodyAsBuffer = Buffer.concat(bufferArray)
-        const bodyAsString = bodyAsBuffer.toString()
-        resolve(bodyAsString)
-      },
-    })
-  })
-}
+import { readRequestBodyAsString } from "@jsenv/server"
+
+const requestBodyString = await readRequestBodyAsString(request.body)
 ```
 
 ### response

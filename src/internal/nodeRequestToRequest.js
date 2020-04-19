@@ -33,5 +33,8 @@ const nodeRequestToCancellationToken = (nodeRequest) => {
   nodeRequest.on("abort", () => {
     cancel("request aborted")
   })
+  nodeRequest.on("close", () => {
+    cancel("request closed")
+  })
   return token
 }
