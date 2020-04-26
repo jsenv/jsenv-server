@@ -41,6 +41,8 @@ import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
 
+const requestTooLongWarningTimeout = 10000
+
 export const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
@@ -377,7 +379,21 @@ ${request.method} ${request.origin}${request.ressource}`)
           }
         }
 
-        const responseProperties = await requestToResponse(request)
+        const responsePropertiesPromise = Promise.resolve(requestToResponse(request))
+        const timeout = setTimeout(() => {
+          logger.warn(
+            `still no response found for ${request.url} after ${requestTooLongWarningTimeout} ms`,
+          )
+        }, requestTooLongWarningTimeout)
+        responsePropertiesPromise.then(
+          () => {
+            clearTimeout(timeout)
+          },
+          () => {
+            clearTimeout(timeout)
+          },
+        )
+        const responseProperties = await responsePropertiesPromise
         return {
           response: responsePropertiesToResponse(responseProperties || {}),
         }
