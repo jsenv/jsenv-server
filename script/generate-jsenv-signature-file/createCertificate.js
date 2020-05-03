@@ -45,6 +45,7 @@ const certificateExtensions = {
 }
 
 export const createCertificate = ({
+  serial = "01", // randomSerialNumber()
   attributes = certificateAttributes,
   extensions = certificateExtensions,
   rootCertificatePem,
@@ -54,7 +55,7 @@ export const createCertificate = ({
   const { privateKey, publicKey } = pki.rsa.generateKeyPair(2048)
 
   certificate.publicKey = publicKey
-  certificate.serialNumber = "01" // randomSerialNumber()
+  certificate.serialNumber = serial
   certificate.validity.notBefore = generateNotValideBeforeDate()
   certificate.validity.notAfter = generateNotValidAfterDate()
   certificate.setSubject(attributesToSubject(attributes))
@@ -91,6 +92,9 @@ export const createCertificate = ({
 
 export const createRootCertificate = () => {
   return createCertificate({
+    // We must use different serial for root certificate
+    // and jsenv certificate otherwise firefox is not happy
+    serial: "02",
     attributes: certificateAttributes,
     extensions: {
       basicConstraints: {
