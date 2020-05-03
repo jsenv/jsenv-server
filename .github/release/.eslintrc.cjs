@@ -1,8 +1,7 @@
 const { createEslintConfig } = require("@jsenv/eslint-config")
 
 const config = createEslintConfig({
-  projectDirectoryUrl: __dirname,
-  importResolutionMethod: "import-map",
+  importResolutionMethod: "node",
 })
 
 module.exports = config
