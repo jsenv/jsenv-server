@@ -67,9 +67,7 @@ const server = await startServer({
 
 `protocol` parameter is a string which is either `"http"` or `"https"`. This parameter is optional with a default value of `"http"`.
 
-If you use `https` protocol a default self signed certificate will be used. It can be found inside [src/jsenvSignature.js](../src/jsenvSignature.js). You may want to add this certificate to your system/browser trusted certificates.
-
-You can also pass your own certificate using `privateKey` and `certificate` parameters.
+If you use `https` protocol you can provide your own certificate using `privateKey` and `certificate` parameters.
 The code below is a basic example showing how you could pass your own certificate.
 
 ```js
@@ -82,6 +80,22 @@ startServer({
   certificate: readFileSync(`${__dirname}/ssl/cert.pem`),
 })
 ```
+
+If you don't have a certificate you can omit the `privateKey` and `certificate` parameters and a default certificate will be used. It can be found inside [src/jsenvSignature.js](../src/jsenvSignature.js). You should trust this certificate in your system/browser settings.
+
+### Trusting jsenv certificate
+
+Jsenv certificate is meant to be used during development, for this reason it's self signed. When your browser encounter a self signed certificate it displays a warning page telling the server certificate is not trustable. This warning can be annoying and browser have specific behaviour when executing a page with a non trusted certificate (for instance chrome disable cache).
+
+The certificate to trust is `jsenvRootCertificate` in [src/jsenvSignature.js](../src/jsenvSignature.js). The way to trust a certificate depends of your browser and operating system:
+
+- Chrome + MacOS or Safari + MacOS
+  - Import certificate to keychain https://support.apple.com/en-gb/guide/keychain-access/kyca35961/mac
+  - Trust that certificate https://support.apple.com/en-gb/guide/keychain-access/kyca11871/mac
+- Firefox
+  - Import certificate as documented in https://wiki.mozilla.org/PSM:Changing_Trust_Settings
+
+> If you need a file with the jsenv certificate create a `whatever.crt` file and copy paste `jsenvRootCertificate` value in it.
 
 ## privateKey
 
