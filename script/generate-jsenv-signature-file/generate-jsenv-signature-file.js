@@ -27,7 +27,7 @@ export const jsenvPrivateKey = ${pemToJavaScriptValue(jsenvCertificate.privateKe
 export const jsenvPublicKey = ${pemToJavaScriptValue(jsenvCertificate.publicKeyPem)}
 
 export const jsenvCertificate = ${pemToJavaScriptValue(jsenvCertificate.certificatePem)}
-  `,
+`,
   )
   console.log(`-> ${urlToFileSystemPath(signatureFileUrl)}`)
 }
