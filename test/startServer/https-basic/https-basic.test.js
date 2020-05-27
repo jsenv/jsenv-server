@@ -19,10 +19,11 @@ const http2Server = await startServer({
   },
 })
 const browser = await chromium.launch({
-  ignoreHTTPSErrors: true,
   // headless: false,
 })
-const page = await browser.newPage()
+const page = await browser.newPage({
+  ignoreHTTPSErrors: true,
+})
 await page.goto(`${http2Server.origin}/index.html`)
 const actual = await page.evaluate(`window.ask()`)
 const expected = 42
