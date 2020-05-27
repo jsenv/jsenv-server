@@ -6,7 +6,7 @@ import { startServer, serveFile } from "../../../index.js"
 const require = createRequire(import.meta.url)
 const testDirectoryUrl = resolveUrl("./", import.meta.url)
 
-const puppeteer = require("puppeteer")
+const { chromium } = require("playwright-chromium")
 
 const http2Server = await startServer({
   logLevel: "warn",
@@ -18,7 +18,7 @@ const http2Server = await startServer({
     return serveFile(fileUrl, request)
   },
 })
-const browser = await puppeteer.launch({
+const browser = await chromium.launch({
   ignoreHTTPSErrors: true,
   // headless: false,
 })

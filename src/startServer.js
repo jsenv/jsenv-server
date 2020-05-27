@@ -37,6 +37,7 @@ import {
 import { jsenvAccessControlAllowedHeaders } from "./jsenvAccessControlAllowedHeaders.js"
 import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMethods.js"
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
+import { findFreePort } from "./findFreePort.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -53,6 +54,7 @@ export const startServer = async ({
   http1Allowed = true,
   ip = "127.0.0.1",
   port = 0, // assign a random available port
+  portHint,
   forcePort = false,
   privateKey = jsenvPrivateKey,
   certificate = jsenvCertificate,
@@ -221,8 +223,17 @@ export const startServer = async ({
     serverCancellationToken.register(stop)
     const startOperation = createStoppableOperation({
       cancellationToken: serverCancellationToken,
-      start: () =>
-        listen({ cancellationToken: serverCancellationToken, server: nodeServer, port, ip }),
+      start: async () => {
+        if (portHint) {
+          port = await findFreePort(portHint, { cancellationToken: serverCancellationToken, ip })
+        }
+        return listen({
+          cancellationToken: serverCancellationToken,
+          server: nodeServer,
+          port,
+          ip,
+        })
+      },
       stop: (_, reason) => stop(reason),
     })
 
