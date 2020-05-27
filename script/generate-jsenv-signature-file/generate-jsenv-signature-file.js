@@ -22,12 +22,12 @@ const generateJsenvSignatureFile = async () => {
     signatureFileUrl,
     `export const jsenvRootCertificate = ${pemToJavaScriptValue(rootCertificate.certificatePem)}
 
-  export const jsenvPrivateKey = ${pemToJavaScriptValue(jsenvCertificate.privateKeyPem)}
+export const jsenvPrivateKey = ${pemToJavaScriptValue(jsenvCertificate.privateKeyPem)}
 
-  export const jsenvPublicKey = ${pemToJavaScriptValue(jsenvCertificate.publicKeyPem)}
+export const jsenvPublicKey = ${pemToJavaScriptValue(jsenvCertificate.publicKeyPem)}
 
-  export const jsenvCertificate = ${pemToJavaScriptValue(jsenvCertificate.certificatePem)}
-  `,
+export const jsenvCertificate = ${pemToJavaScriptValue(jsenvCertificate.certificatePem)}
+`,
   )
   console.log(`-> ${urlToFileSystemPath(signatureFileUrl)}`)
 }

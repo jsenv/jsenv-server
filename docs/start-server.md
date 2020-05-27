@@ -9,6 +9,7 @@
   - [certificate](#certificate)
   - [ip](#ip)
   - [port](#port)
+  - [portHint](#portHint)
   - [forcePort](#forcePort)
   - [requestToResponse](#requestToResponse)
     - [request](#request)
@@ -116,6 +117,12 @@ You can pass an empty string to listen any ip.
 `port` parameter is a number representing the port server will listen. This parameter is optional with a default value of `0`.
 
 A value of `0` means server will listen to a random available port. In that case, if you want to know the listened port use [origin](#origin) value returned by startServer.
+
+## portHint
+
+`portHint` parameter is a number representing the port you would like to listen. This parameter is optional with a default value of `undefined` meaning it won't be considered.
+
+When `portHint` is a number and `port` is `0` server will try to listen `portHint` if it's available, otherwise it will try the closest next port until it find an available port to listen.
 
 ## forcePort
 
