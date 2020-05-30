@@ -393,7 +393,12 @@ ${request.method} ${request.origin}${request.ressource}`)
         const responsePropertiesPromise = Promise.resolve(requestToResponse(request))
         const timeout = setTimeout(() => {
           logger.warn(
-            `still no response found for ${request.url} after ${requestTooLongWarningTimeout} ms`,
+            `still no response found for request after ${requestTooLongWarningTimeout} ms
+--- request ressource ---
+${request.ressource}
+--- request headers ---
+${JSON.stringify(request.headers, null, '  ')}
+`,
           )
         }, requestTooLongWarningTimeout)
         responsePropertiesPromise.then(
