@@ -394,10 +394,10 @@ ${request.method} ${request.origin}${request.ressource}`)
         const timeout = setTimeout(() => {
           logger.warn(
             `still no response found for request after ${requestTooLongWarningTimeout} ms
---- request ressource ---
-${request.ressource}
+--- request url ---
+${request.origin}${request.ressource}
 --- request headers ---
-${JSON.stringify(request.headers, null, '  ')}
+${JSON.stringify(request.headers, null, "  ")}
 `,
           )
         }, requestTooLongWarningTimeout)
