@@ -108,9 +108,9 @@ The certificate to trust is `jsenvRootCertificate` in [src/jsenvSignature.js](..
 
 ## ip
 
-`ip` parameter is a string representing the ip server will listen. This parameter is optional with a default value of `"127.0.0.1"`.
+`ip` parameter is a string representing the ip server will listen. This parameter is optional with a default value of `"0.0.0.0"`.
 
-You can pass an empty string to listen any ip.
+`"0.0.0.0"` means server listen every ip for a given port.
 
 ## port
 

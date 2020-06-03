@@ -52,7 +52,7 @@ export const startServer = async ({
   protocol = "http",
   http2 = false,
   http1Allowed = true,
-  ip = "127.0.0.1",
+  ip = "0.0.0.0", // will it work on windows ? https://github.com/nodejs/node/issues/14900
   port = 0, // assign a random available port
   portHint,
   forcePort = false,
@@ -107,10 +107,6 @@ export const startServer = async ({
     }
     if (protocol !== "http" && protocol !== "https") {
       throw new Error(`protocol must be http or https, got ${protocol}`)
-    }
-    // https://github.com/nodejs/node/issues/14900
-    if (ip === "0.0.0.0" && process.platform === "win32") {
-      throw new Error(`listening ${ip} not available on window`)
     }
     if (protocol === "https") {
       if (!privateKey) {
