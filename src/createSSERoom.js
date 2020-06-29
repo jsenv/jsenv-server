@@ -8,15 +8,17 @@ export const createSSERoom = ({
   retryDuration = 1 * 1000,
   historyLength = 1 * 1000,
   maxConnectionAllowed = 100, // max 100 users accepted
+  computeEventId = (event, lastEventId) => lastEventId + 1,
+  joinEvent = false,
 } = {}) => {
   const logger = createLogger({ logLevel })
 
   const connections = new Set()
-  // what about history that keeps growing ?
-  // we should add some limit
-  // one limit could be that an event older than 24h is be deleted
-  const history = createEventHistory(historyLength)
-  let previousEventId
+  const eventHistory = createEventHistory(historyLength)
+  // what about previousEventId that keeps growing ?
+  // we could add some limit
+  // one limit could be that an event older than 24h is deleted
+  let previousEventId = 0
   let state = "closed"
   let interval
 
@@ -32,19 +34,22 @@ export const createSSERoom = ({
       }
     }
 
-    const joinEvent = {
-      id: previousEventId === undefined ? 0 : previousEventId + 1,
+    const firstEvent = {
       retry: retryDuration,
-      type: "join",
+      type: joinEvent ? "join" : "comment",
       data: new Date().toLocaleTimeString(),
     }
-    previousEventId = joinEvent.id
-    history.add(joinEvent)
+
+    if (joinEvent) {
+      firstEvent.id = computeEventId(firstEvent, previousEventId)
+      previousEventId = firstEvent.id
+      eventHistory.add(firstEvent)
+    }
 
     const events = [
-      joinEvent,
       // send events which occured between lastKnownId & now
-      ...(lastKnownId === undefined ? [] : history.since(lastKnownId)),
+      ...(lastKnownId === undefined ? [] : eventHistory.since(lastKnownId)),
+      firstEvent,
     ]
 
     const body = createObservable({
@@ -100,9 +105,11 @@ export const createSSERoom = ({
       logger.debug(
         `send ${event.type} event, number of client listening event source: ${connections.size}`,
       )
-      event.id = previousEventId === undefined ? 0 : previousEventId + 1
+      if (typeof event.id === "undefined") {
+        event.id = computeEventId(event, previousEventId)
+      }
       previousEventId = event.id
-      history.add(event)
+      eventHistory.add(event)
     }
 
     write(stringifySourceEvent(event))
@@ -128,11 +135,13 @@ export const createSSERoom = ({
     logger.debug(`stopping, number of client to close: ${connections.size}`)
     connections.forEach((connection) => connection.unsubscribe())
     clearInterval(interval)
-    history.reset()
+    eventHistory.reset()
     state = "stopped"
   }
 
-  return { start, stop, connect, sendEvent }
+  const eventsSince = (id) => eventHistory.since(id)
+
+  return { start, stop, connect, eventsSince, sendEvent }
 }
 
 // https://github.com/dmail-old/project/commit/da7d2c88fc8273850812972885d030a22f9d7448
@@ -163,29 +172,22 @@ const stringifySourceEvent = ({ data, type = "message", id, retry }) => {
 
 const createEventHistory = ({ limit } = {}) => {
   const events = []
-  let removedCount = 0
 
   const add = (data) => {
     events.push(data)
 
     if (events.length >= limit) {
       events.shift()
-      removedCount++
     }
   }
 
-  const since = (index) => {
-    index = parseInt(index)
-    if (isNaN(index)) {
-      throw new TypeError("history.since() expect a number")
-    }
-    index -= removedCount
-    return index < 0 ? [] : events.slice(index)
+  const since = (id) => {
+    const index = events.findIndex((event) => event.id === id)
+    return index === -1 ? [] : events.slice(index)
   }
 
   const reset = () => {
     events.length = 0
-    removedCount = 0
   }
 
   return { add, since, reset }
