@@ -294,12 +294,9 @@ ${error.stack}`)
       if (sendServerTiming) {
         // as specified in https://w3c.github.io/server-timing/#the-performanceservertiming-interface
         // duration is a https://www.w3.org/TR/hr-time-2/#sec-domhighrestimestamp
-        const responseStartTiming = {
-          "time to start responding": endTime - startTime,
-        }
         const serverTiming = {
-          ...responseStartTiming,
           ...response.timing,
+          "total time to start responding": endTime - startTime,
         }
         response.headers = composeResponseHeaders(
           timingToServerTimingResponseHeaders(serverTiming),
@@ -381,6 +378,7 @@ ${request.method} ${request.origin}${request.ressource}`)
         headers = {},
         body = "",
         bodyEncoding,
+        timing,
       }) => {
         if (corsEnabled) {
           const accessControlHeaders = generateAccessControlHeaders({
@@ -402,6 +400,7 @@ ${request.method} ${request.origin}${request.ressource}`)
             headers: composeResponseHeaders(headers, accessControlHeaders),
             body,
             bodyEncoding,
+            timing,
           }
         }
 
@@ -411,6 +410,7 @@ ${request.method} ${request.origin}${request.ressource}`)
           headers,
           body,
           bodyEncoding,
+          timing,
         }
       }
 
@@ -552,6 +552,26 @@ const composePredicate = (previousPredicate, predicate) => {
   }
 }
 
+const letters = [
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+]
+
 // to predict order in chrome devtools we should put a,b,c,d,e or something
 // because in chrome dev tools they are shown in alphabetic order
 // also we should manipulate a timing object instead of a header to facilitate
@@ -561,7 +581,7 @@ const timingToServerTimingResponseHeaders = (timing) => {
   const serverTimingValue = Object.keys(timing)
     .map((key, index) => {
       const time = timing[key]
-      return `${index};desc=${JSON.stringify(key)};dur=${time}`
+      return `${letters[index] || "zz"};desc=${JSON.stringify(key)};dur=${time}`
     })
     .join(", ")
 

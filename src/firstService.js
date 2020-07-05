@@ -21,7 +21,7 @@ export const firstServiceWithTiming = (namedServices) => {
       }),
       start: async ({ serviceName, serviceFn }) => {
         const [time, value] = await measureFunctionDuration(() => serviceFn(request))
-        servicesTiming[`service${serviceName}`] = time
+        servicesTiming[serviceName] = time
         return value
       },
       predicate: (value) => {
