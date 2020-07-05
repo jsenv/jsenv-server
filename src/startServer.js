@@ -81,6 +81,8 @@ export const startServer = async ({
   // we could put a lot here, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Max-Age
   accessControlMaxAge = 600,
 
+  // https://www.w3.org/TR/server-timing/
+  sendServerTiming = false,
   sendInternalErrorStack = false,
   internalErrorToResponseProperties = (error) => {
     const body = error
@@ -271,7 +273,23 @@ ${request.ressource}
 ${error.stack}`)
       })
 
+      const startTime = Date.now()
       const { response, error } = await generateResponseDescription(request)
+      const endTime = Date.now()
+      if (sendServerTiming) {
+        // as specified in https://w3c.github.io/server-timing/#the-performanceservertiming-interface
+        // duration is a https://www.w3.org/TR/hr-time-2/#sec-domhighrestimestamp
+        const duration = endTime - startTime
+        // compose response headers in case requestToResponse produces a server-timing header
+        // so that the high level server-timing header comes first
+        // and details server-timing from requestToResponse comes next
+        response.headers = composeResponseHeaders(
+          {
+            "server-timing": `app;desc="time to start responding";dur=${duration}`,
+          },
+          response.headers,
+        )
+      }
 
       logger.info(`${request.method} ${request.origin}${request.ressource}`)
 
@@ -508,6 +526,7 @@ const generateAccessControlHeaders = ({
     "access-control-allow-headers": allowedHeaderArray.join(", "),
     ...(accessControlAllowCredentials ? { "access-control-allow-credentials": true } : {}),
     "access-control-max-age": accessControlMaxAge,
+    "timing-allow-origin": allowedOriginArray.join(", "),
     ...(vary.length ? { vary: vary.join(", ") } : {}),
   }
 }
