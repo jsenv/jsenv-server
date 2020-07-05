@@ -375,6 +375,7 @@ ${request.method} ${request.origin}${request.ressource}`)
             accessControlAllowRequestHeaders,
             accessControlAllowCredentials,
             accessControlMaxAge,
+            sendServerTiming,
           })
 
           return {
@@ -481,6 +482,7 @@ const generateAccessControlHeaders = ({
   // by default OPTIONS request can be cache for a long time, it's not going to change soon ?
   // we could put a lot here, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Max-Age
   accessControlMaxAge = 600,
+  sendServerTiming,
 } = {}) => {
   const vary = []
 
@@ -526,7 +528,7 @@ const generateAccessControlHeaders = ({
     "access-control-allow-headers": allowedHeaderArray.join(", "),
     ...(accessControlAllowCredentials ? { "access-control-allow-credentials": true } : {}),
     "access-control-max-age": accessControlMaxAge,
-    "timing-allow-origin": allowedOriginArray.join(", "),
+    ...(sendServerTiming ? { "timing-allow-origin": allowedOriginArray.join(", ") } : {}),
     ...(vary.length ? { vary: vary.join(", ") } : {}),
   }
 }
