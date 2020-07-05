@@ -38,6 +38,7 @@ import { jsenvAccessControlAllowedHeaders } from "./jsenvAccessControlAllowedHea
 import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMethods.js"
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 import { findFreePort } from "./findFreePort.js"
+import { trackServerRequest } from "./internal/trackServerRequest.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -238,6 +239,7 @@ export const startServer = async ({
     const serverOrigin = originAsString({ protocol, ip, port })
 
     const connectionsTracker = trackServerPendingConnections(nodeServer, {
+      http2,
       onConnectionError: (error, connection) => {
         if (!connection.destroyed) {
           onError(error)
@@ -247,7 +249,7 @@ export const startServer = async ({
     // opened connection must be shutdown before the close event is emitted
     registerCleanupCallback(connectionsTracker.stop)
 
-    const pendingRequestsTracker = trackServerPendingRequests(nodeServer)
+    const pendingRequestsTracker = trackServerPendingRequests(nodeServer, { http2 })
     // ensure pending requests got a response from the server
     registerCleanupCallback((reason) => {
       pendingRequestsTracker.stop({
@@ -323,11 +325,9 @@ ${request.method} ${request.origin}${request.ressource}`)
       }
     }
 
-    nodeServer.on("request", requestCallback)
+    const removeRequestListener = trackServerRequest(nodeServer, requestCallback, { http2 })
     // ensure we don't try to handle new requests while server is stopping
-    registerCleanupCallback(() => {
-      nodeServer.removeListener("request", requestCallback)
-    })
+    registerCleanupCallback(removeRequestListener)
 
     logger.info(`${serverName} started at ${serverOrigin}`)
     startedCallback({ origin: serverOrigin })

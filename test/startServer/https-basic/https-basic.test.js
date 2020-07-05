@@ -8,10 +8,11 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 
 const { chromium } = require("playwright-chromium")
 
-const http2Server = await startServer({
+const server = await startServer({
   logLevel: "warn",
   keepProcessAlive: false,
   protocol: "https",
+  http2: true,
   port: 3456,
   requestToResponse: (request) => {
     const fileUrl = resolveUrl(request.ressource.slice(1), testDirectoryUrl)
@@ -24,7 +25,7 @@ const browser = await chromium.launch({
 const page = await browser.newPage({
   ignoreHTTPSErrors: true,
 })
-await page.goto(`${http2Server.origin}/index.html`)
+await page.goto(`${server.origin}/index.html`)
 const actual = await page.evaluate(`window.ask()`)
 const expected = 42
 assert({ actual, expected })

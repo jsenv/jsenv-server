@@ -1,4 +1,14 @@
-export const trackServerPendingConnections = (nodeServer, { onConnectionError }) => {
+export const trackServerPendingConnections = (nodeServer, { http2, onConnectionError }) => {
+  if (http2) {
+    // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
+    return trackHttp1ServerPendingConnections(nodeServer, { onConnectionError })
+  }
+  return trackHttp1ServerPendingConnections(nodeServer, { onConnectionError })
+}
+
+// const trackHttp2ServerPendingSessions = () => {}
+
+const trackHttp1ServerPendingConnections = (nodeServer, { onConnectionError }) => {
   const pendingConnections = new Set()
 
   const connectionListener = (connection) => {

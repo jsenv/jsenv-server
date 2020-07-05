@@ -1,4 +1,14 @@
-export const trackServerPendingRequests = (nodeServer) => {
+export const trackServerPendingRequests = (nodeServer, { http2 }) => {
+  if (http2) {
+    // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
+    return trackHttp1ServerPendingRequests(nodeServer)
+  }
+  return trackHttp1ServerPendingRequests(nodeServer)
+}
+
+// const trackHttp2ServerPendingStreams = () => {}
+
+const trackHttp1ServerPendingRequests = (nodeServer) => {
   const pendingClients = new Set()
 
   const requestListener = (nodeRequest, nodeResponse) => {

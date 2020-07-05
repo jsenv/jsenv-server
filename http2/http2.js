@@ -2,6 +2,9 @@
 // you got a WRITE_AFTER_END error on the http2Stream instance
 // as if it was reused after being ended, don't know why
 // for now we disable it and count on https://nodejs.org/api/http2.html#http2_compatibility_api
+// if we ever want to try again with the http2 api
+// don't forget https://github.com/jsenv/jsenv-server/pull/7/commits/89b784d21a83e048e67275312282edb9d4efcc10
+// to properly register "stream" event instead of "request" with the changes that comes with it
 
 import { constants } from "http2"
 import { Stream, Writable, Readable } from "stream"
