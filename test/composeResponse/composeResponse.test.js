@@ -18,6 +18,7 @@ import { composeResponse } from "../../index.js"
     },
     body: undefined,
     bodyEncoding: undefined,
+    timing: undefined,
   }
   assert({ actual, expected })
 }
@@ -45,6 +46,7 @@ import { composeResponse } from "../../index.js"
     },
     body: undefined,
     bodyEncoding: undefined,
+    timing: undefined,
   }
   assert({ actual, expected })
 }

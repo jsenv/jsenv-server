@@ -17,5 +17,6 @@ const expected = {
     "etag": bufferToEtag(sourceBuffer),
   },
   body: sourceBuffer,
+  timing: actual.timing,
 }
 assert({ actual, expected })
