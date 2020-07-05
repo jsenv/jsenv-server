@@ -294,14 +294,15 @@ ${error.stack}`)
       if (sendServerTiming) {
         // as specified in https://w3c.github.io/server-timing/#the-performanceservertiming-interface
         // duration is a https://www.w3.org/TR/hr-time-2/#sec-domhighrestimestamp
-        const duration = endTime - startTime
-        // compose response headers in case requestToResponse produces a server-timing header
-        // so that the high level server-timing header comes first
-        // and details server-timing from requestToResponse comes next
+        const responseStartTiming = {
+          "time to start responding": endTime - startTime,
+        }
+        const serverTiming = {
+          ...responseStartTiming,
+          ...response.timing,
+        }
         response.headers = composeResponseHeaders(
-          {
-            "server-timing": `app;desc="time to start responding";dur=${duration}`,
-          },
+          timingToServerTimingResponseHeaders(serverTiming),
           response.headers,
         )
       }
@@ -549,4 +550,20 @@ const composePredicate = (previousPredicate, predicate) => {
   return (value) => {
     return previousPredicate(value) || predicate(value)
   }
+}
+
+// to predict order in chrome devtools we should put a,b,c,d,e or something
+// because in chrome dev tools they are shown in alphabetic order
+// also we should manipulate a timing object instead of a header to facilitate
+// manipulation of the object so that the timing header response generation logic belongs to @jsenv/server
+// so response can return a new timing object
+const timingToServerTimingResponseHeaders = (timing) => {
+  const serverTimingValue = Object.keys(timing)
+    .map((key, index) => {
+      const time = timing[key]
+      return `${index};desc=${JSON.stringify(key)};dur=${time}`
+    })
+    .join(", ")
+
+  return { "server-timing": serverTimingValue }
 }

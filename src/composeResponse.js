@@ -7,6 +7,9 @@ const responseCompositionMapping = {
   headers: composeResponseHeaders,
   body: (prevBody, body) => body,
   bodyEncoding: (prevEncoding, encoding) => encoding,
+  timing: (prevTiming, timing) => {
+    return { ...prevTiming, ...timing }
+  },
 }
 
 export const composeResponse = compositionMappingToComposeStrict(responseCompositionMapping)

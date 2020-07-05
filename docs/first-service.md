@@ -24,18 +24,16 @@ It works like this:
 ```js
 import { firstService } from "@jsenv/server"
 
-const requestToResponse = (request) => {
-  return firstService(
-    () => {
-      if (ressource !== "/") return null
-      return { status: 204 }
-    },
-    () => {
-      if (ressource !== "/whatever") return null
-      return { status: 200 }
-    },
-  )
-}
+const requestToResponse = firstService(
+  (request) => {
+    if (request.ressource !== "/") return null
+    return { status: 204 }
+  },
+  (request) => {
+    if (request.ressource !== "/whatever") return null
+    return { status: 200 }
+  },
+)
 ```
 
 `requestToResponse` above have the following behaviour:
