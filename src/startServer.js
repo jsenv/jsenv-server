@@ -123,6 +123,9 @@ export const startServer = async ({
         throw new Error(`you passed a certificate without privateKey`)
       }
     }
+    if (http2 && protocol !== "https") {
+      throw new Error(`http2 needs "https" but protocol is "${protocol}"`)
+    }
 
     const internalCancellationSource = createCancellationSource()
     const externalCancellationToken = cancellationToken
