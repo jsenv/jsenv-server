@@ -53,6 +53,7 @@ export const startServer = async ({
   protocol = "http",
   http2 = false,
   http1Allowed = true,
+  redirectHttpToHttps = false,
   ip = "0.0.0.0", // will it work on windows ? https://github.com/nodejs/node/issues/14900
   port = 0, // assign a random available port
   portHint,
@@ -138,6 +139,9 @@ export const startServer = async ({
     )
 
     const logger = createLogger({ logLevel })
+    if (redirectHttpToHttps && protocol === "http") {
+      logger.warn(`redirectHttpToHttps ignored because protocol is http`)
+    }
 
     const onError = (error) => {
       if (errorIsCancellation(error)) {
@@ -264,6 +268,13 @@ export const startServer = async ({
     })
 
     const requestCallback = async (nodeRequest, nodeResponse) => {
+      if (redirectHttpToHttps && protocol === "http2" && !nodeRequest.connection.encrypted) {
+        nodeResponse.writeHead(301, {
+          location: `${serverOrigin}${nodeRequest.ressource}`,
+        })
+        return
+      }
+
       const request = nodeRequestToRequest(nodeRequest, { serverCancellationToken, serverOrigin })
       nodeRequest.on("error", (error) => {
         logger.error(`error on request.
