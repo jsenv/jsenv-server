@@ -1,6 +1,6 @@
 {
   "name": "@jsenv/server",
-  "version": "2.10.1",
+  "version": "2.11.0",
   "description": "High level api for node.js server.",
   "license": "MIT",
   "repository": {
@@ -46,16 +46,16 @@
     "postpublish": "node ./script/transform-package/restore-postinstall.js"
   },
   "dependencies": {
-    "@jsenv/cancellation": "1.4.1",
+    "@jsenv/cancellation": "1.4.2",
     "@jsenv/logger": "3.3.1",
     "@jsenv/node-signals": "2.0.1",
-    "@jsenv/util": "3.5.2",
+    "@jsenv/util": "3.6.1",
     "abort-controller": "3.0.0",
     "kill-port": "1.6.0",
     "node-fetch": "2.6.0"
   },
   "devDependencies": {
-    "@jsenv/assert": "2.1.0",
+    "@jsenv/assert": "2.2.1",
     "@jsenv/codecov-upload": "3.4.1",
     "@jsenv/core": "13.1.4",
     "@jsenv/eslint-config": "12.4.1",
@@ -65,7 +65,7 @@
     "@jsenv/package-publish": "1.5.1",
     "@jsenv/prettier-check-project": "5.6.0",
     "babel-eslint": "11.0.0-beta.0",
-    "eslint": "7.1.0",
+    "eslint": "7.4.0",
     "node-forge": "0.9.1",
     "playwright-chromium": "1.0.2",
     "prettier": "2.0.5"

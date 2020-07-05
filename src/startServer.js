@@ -104,6 +104,7 @@ export const startServer = async ({
   startedCallback = () => {},
   stoppedCallback = () => {},
   errorIsCancellation = () => false,
+  nagle = true,
 } = {}) => {
   return catchCancellation(async () => {
     if (port === 0 && forcePort) {
@@ -268,6 +269,9 @@ export const startServer = async ({
     })
 
     const requestCallback = async (nodeRequest, nodeResponse) => {
+      if (!nagle) {
+        nodeRequest.connection.setNoDelay(true)
+      }
       if (redirectHttpToHttps && protocol === "http2" && !nodeRequest.connection.encrypted) {
         nodeResponse.writeHead(301, {
           location: `${serverOrigin}${nodeRequest.ressource}`,
@@ -409,6 +413,7 @@ ${request.method} ${request.origin}${request.ressource}`)
         }
       }
 
+      let timeout
       try {
         if (corsEnabled && request.method === "OPTIONS") {
           return {
@@ -421,8 +426,7 @@ ${request.method} ${request.origin}${request.ressource}`)
           }
         }
 
-        const responsePropertiesPromise = Promise.resolve(requestToResponse(request))
-        const timeout = setTimeout(() => {
+        timeout = setTimeout(() => {
           logger.warn(
             `still no response found for request after ${requestTooLongWarningTimeout} ms
 --- request url ---
@@ -432,19 +436,14 @@ ${JSON.stringify(request.headers, null, "  ")}
 `,
           )
         }, requestTooLongWarningTimeout)
-        responsePropertiesPromise.then(
-          () => {
-            clearTimeout(timeout)
-          },
-          () => {
-            clearTimeout(timeout)
-          },
-        )
-        const responseProperties = await responsePropertiesPromise
+
+        const responseProperties = await requestToResponse(request)
+        clearTimeout(timeout)
         return {
           response: responsePropertiesToResponse(responseProperties || {}),
         }
       } catch (error) {
+        clearTimeout(timeout)
         return {
           response: composeResponse(
             responsePropertiesToResponse({

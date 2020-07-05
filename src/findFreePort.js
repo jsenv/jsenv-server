@@ -39,22 +39,22 @@ const portIsFree = async ({ cancellationToken, port, ip }) => {
     ip,
   })
 
-  return listenOperation.then(
-    () => {
-      const stopPromise = listenOperation.stop()
-      // cancellation must wait for server to be closed before considering
-      // cancellation as done
-      cancellationToken.register(() => stopPromise)
-      return stopPromise.then(() => true)
-    },
-    (error) => {
-      if (error && error.code === "EADDRINUSE") {
-        return false
-      }
-      if (error && error.code === "EACCES") {
-        return false
-      }
-      return Promise.reject(error)
-    },
-  )
+  try {
+    await listenOperation
+  } catch (error) {
+    if (error && error.code === "EADDRINUSE") {
+      return false
+    }
+    if (error && error.code === "EACCES") {
+      return false
+    }
+    return Promise.reject(error)
+  }
+
+  const stopPromise = listenOperation.stop()
+  // cancellation must wait for server to be closed before considering
+  // cancellation as done
+  cancellationToken.register(() => stopPromise)
+  await stopPromise
+  return true
 }
