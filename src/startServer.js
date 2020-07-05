@@ -342,6 +342,8 @@ ${request.method} ${request.origin}${request.ressource}`)
         ignoreBody: request.method === "HEAD",
         // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L97
         ignoreStatusText: Boolean(nodeRequest.stream),
+        // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L112
+        ignoreConnectionHeader: Boolean(nodeRequest.stream),
       })
 
       if (

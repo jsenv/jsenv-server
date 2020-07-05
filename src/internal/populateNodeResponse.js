@@ -6,9 +6,9 @@ import { valueToObservable } from "./valueToObservable.js"
 export const populateNodeResponse = (
   nodeResponse,
   { status, statusText, headers, body, bodyEncoding },
-  { cancellationToken, ignoreBody, ignoreStatusText } = {},
+  { cancellationToken, ignoreBody, ignoreStatusText, ignoreConnectionHeader } = {},
 ) => {
-  const nodeHeaders = headersToNodeHeaders(headers)
+  const nodeHeaders = headersToNodeHeaders(headers, { ignoreConnectionHeader })
   // nodejs strange signature for writeHead force this
   // https://nodejs.org/api/http.html#http_response_writehead_statuscode_statusmessage_headers
   if (statusText === undefined || ignoreStatusText) {
@@ -72,10 +72,11 @@ const mapping = {
   // "last-modified": "Last-Modified",
 }
 
-const headersToNodeHeaders = (headers) => {
+const headersToNodeHeaders = (headers, { ignoreConnectionHeader }) => {
   const nodeHeaders = {}
 
   Object.keys(headers).forEach((name) => {
+    if (name === "connection" && ignoreConnectionHeader) return
     const nodeHeaderName = name in mapping ? mapping[name] : name
     nodeHeaders[nodeHeaderName] = headers[name]
   })
