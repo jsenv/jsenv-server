@@ -15,16 +15,14 @@ export const timeStart = (name) => {
 }
 
 export const timeFunction = (name, fn) => {
-  return (...args) => {
-    const timeEnd = timeStart(name)
-    const returnValue = fn(...args)
-    if (returnValue && typeof returnValue.then === "function") {
-      return returnValue.then((value) => {
-        return [timeEnd(), value]
-      })
-    }
-    return [timeEnd(), returnValue]
+  const timeEnd = timeStart(name)
+  const returnValue = fn()
+  if (returnValue && typeof returnValue.then === "function") {
+    return returnValue.then((value) => {
+      return [timeEnd(), value]
+    })
   }
+  return [timeEnd(), returnValue]
 }
 
 // to predict order in chrome devtools we should put a,b,c,d,e or something

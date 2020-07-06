@@ -17,6 +17,10 @@ const expected = {
     "etag": bufferToEtag(sourceBuffer),
   },
   body: sourceBuffer,
-  timing: actual.timing,
+  timing: {
+    "file service>read file stat": actual.timing["file service>read file stat"],
+    "file service>read file": actual.timing["file service>read file"],
+    "file service>generate file etag": actual.timing["file service>generate file etag"],
+  },
 }
 assert({ actual, expected })
