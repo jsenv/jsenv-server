@@ -6,7 +6,7 @@ import {
   urlToFileSystemPath,
 } from "@jsenv/util"
 import { createCancellationToken, createOperation } from "@jsenv/cancellation"
-import { measureFunctionDuration } from "./internal/measureFunctionDuration.js"
+import { timeFunction } from "./serverTiming.js"
 import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemErrorToResponseProperties.js"
 import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
@@ -38,12 +38,9 @@ export const serveFile = async (
     const cacheWithETag = !clientCacheDisabled && cacheStrategy === "etag"
     const cachedDisabled = clientCacheDisabled || cacheStrategy === "none"
 
-    const [readStatTime, sourceStat] = await measureFunctionDuration(() =>
+    const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () =>
       statSync(urlToFileSystemPath(sourceUrl)),
     )
-    const readStatTiming = {
-      "file service>read file stat": readStatTime,
-    }
 
     if (sourceStat.isDirectory()) {
       if (canReadDirectory === false) {
@@ -57,13 +54,14 @@ export const serveFile = async (
         }
       }
 
-      const [readDirectoryTime, directoryContentArray] = await measureFunctionDuration(() =>
-        createOperation({
-          cancellationToken,
-          start: () => readDirectory(sourceUrl),
-        }),
+      const [readDirectoryTiming, directoryContentArray] = await timeFunction(
+        "file service>read directory",
+        () =>
+          createOperation({
+            cancellationToken,
+            start: () => readDirectory(sourceUrl),
+          }),
       )
-      const readDirectoryTiming = { "file service>read directory": readDirectoryTime }
       const directoryContentJson = JSON.stringify(directoryContentArray)
 
       return {
@@ -93,17 +91,20 @@ export const serveFile = async (
     }
 
     if (cacheWithETag) {
-      const [readFileTime, fileContentAsBuffer] = await measureFunctionDuration(() =>
-        createOperation({
-          cancellationToken,
-          start: () => readFile(urlToFileSystemPath(sourceUrl)),
-        }),
+      const [readFileTiming, fileContentAsBuffer] = await timeFunction(
+        "file service>read file",
+        () =>
+          createOperation({
+            cancellationToken,
+            start: () => readFile(urlToFileSystemPath(sourceUrl)),
+          }),
       )
-      const readFileTiming = { "file service>read file": readFileTime }
-      const [computeFileEtagTime, fileContentEtag] = await measureFunctionDuration(() =>
+      const [
+        computeEtagTiming,
+        fileContentEtag,
+      ] = await timeFunction("file service>generate file etag", () =>
         bufferToEtag(fileContentAsBuffer),
       )
-      const computeEtagTiming = { "file service>generate file etag": computeFileEtagTime }
 
       if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
         return {

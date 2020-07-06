@@ -39,6 +39,7 @@ import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMet
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 import { findFreePort } from "./findFreePort.js"
 import { trackServerRequest } from "./internal/trackServerRequest.js"
+import { timeFunction, timingToServerTimingResponseHeaders } from "./serverTiming.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -288,15 +289,14 @@ ${request.ressource}
 ${error.stack}`)
       })
 
-      const startTime = Date.now()
-      const { response, error } = await generateResponseDescription(request)
-      const endTime = Date.now()
+      const [
+        startRespondingTiming,
+        { response, error },
+      ] = await timeFunction("time to start responding", () => generateResponseDescription(request))
       if (sendServerTiming) {
-        // as specified in https://w3c.github.io/server-timing/#the-performanceservertiming-interface
-        // duration is a https://www.w3.org/TR/hr-time-2/#sec-domhighrestimestamp
         const serverTiming = {
           ...response.timing,
-          "total time to start responding": endTime - startTime,
+          ...startRespondingTiming,
         }
         response.headers = composeResponseHeaders(
           timingToServerTimingResponseHeaders(serverTiming),
@@ -550,40 +550,4 @@ const composePredicate = (previousPredicate, predicate) => {
   return (value) => {
     return previousPredicate(value) || predicate(value)
   }
-}
-
-const letters = [
-  "a",
-  "b",
-  "c",
-  "d",
-  "e",
-  "f",
-  "g",
-  "h",
-  "i",
-  "j",
-  "k",
-  "l",
-  "m",
-  "n",
-  "o",
-  "p",
-  "q",
-]
-
-// to predict order in chrome devtools we should put a,b,c,d,e or something
-// because in chrome dev tools they are shown in alphabetic order
-// also we should manipulate a timing object instead of a header to facilitate
-// manipulation of the object so that the timing header response generation logic belongs to @jsenv/server
-// so response can return a new timing object
-const timingToServerTimingResponseHeaders = (timing) => {
-  const serverTimingValue = Object.keys(timing)
-    .map((key, index) => {
-      const time = timing[key]
-      return `${letters[index] || "zz"};desc=${JSON.stringify(key)};dur=${time}`
-    })
-    .join(", ")
-
-  return { "server-timing": serverTimingValue }
 }

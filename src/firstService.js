@@ -1,5 +1,5 @@
 import { firstOperationMatching } from "@jsenv/cancellation"
-import { measureFunctionDuration } from "./internal/measureFunctionDuration.js"
+import { timeFunction } from "./serverTiming.js"
 import { composeResponse } from "./composeResponse.js"
 
 export const firstService = (...callbacks) => {
@@ -20,8 +20,8 @@ export const firstServiceWithTiming = (namedServices) => {
         return { serviceName, serviceFn: namedServices[serviceName] }
       }),
       start: async ({ serviceName, serviceFn }) => {
-        const [time, value] = await measureFunctionDuration(() => serviceFn(request))
-        servicesTiming[serviceName] = time
+        const [serviceTiming, value] = await timeFunction(serviceName, () => serviceFn(request))
+        Object.assign(servicesTiming, serviceTiming)
         return value
       },
       predicate: (value) => {
