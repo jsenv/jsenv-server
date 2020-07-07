@@ -9,7 +9,7 @@ export const createSSERoom = ({
   historyLength = 1 * 1000,
   maxConnectionAllowed = 100, // max 100 users accepted
   computeEventId = (event, lastEventId) => lastEventId + 1,
-  joinEvent = false,
+  welcomeEvent = false,
 } = {}) => {
   const logger = createLogger({ logLevel })
 
@@ -36,11 +36,11 @@ export const createSSERoom = ({
 
     const firstEvent = {
       retry: retryDuration,
-      type: joinEvent ? "join" : "comment",
+      type: welcomeEvent ? "welcome" : "comment",
       data: new Date().toLocaleTimeString(),
     }
 
-    if (joinEvent) {
+    if (welcomeEvent) {
       firstEvent.id = computeEventId(firstEvent, previousEventId)
       previousEventId = firstEvent.id
       eventHistory.add(firstEvent)
@@ -170,7 +170,7 @@ const stringifySourceEvent = ({ data, type = "message", id, retry }) => {
   return string
 }
 
-const createEventHistory = ({ limit } = {}) => {
+const createEventHistory = (limit) => {
   const events = []
 
   const add = (data) => {
