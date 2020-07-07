@@ -10,6 +10,7 @@ export const createSSERoom = ({
   maxConnectionAllowed = 100, // max 100 users accepted
   computeEventId = (event, lastEventId) => lastEventId + 1,
   welcomeEvent = false,
+  onConnect = () => {},
 } = {}) => {
   const logger = createLogger({ logLevel })
 
@@ -82,6 +83,8 @@ export const createSSERoom = ({
     logger.debug(
       `client joined, number of client connected to event source: ${connections.size}, max allowed: ${maxConnectionAllowed}`,
     )
+
+    onConnect()
 
     return {
       status: 200,
