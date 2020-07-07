@@ -1,6 +1,6 @@
 {
   "name": "@jsenv/server",
-  "version": "3.0.0-alpha.4",
+  "version": "3.0.0-alpha.5",
   "description": "High level api for node.js server.",
   "license": "MIT",
   "repository": {

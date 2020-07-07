@@ -10,7 +10,7 @@ export const createSSERoom = ({
   maxConnectionAllowed = 100, // max 100 users accepted
   computeEventId = (event, lastEventId) => lastEventId + 1,
   welcomeEvent = false,
-  onConnect = () => {},
+  welcomeEventPublic = false,
 } = {}) => {
   const logger = createLogger({ logLevel })
 
@@ -22,6 +22,14 @@ export const createSSERoom = ({
   let previousEventId = 0
   let state = "closed"
   let interval
+
+  const eventsSince = (id) => {
+    const events = eventHistory.since(id)
+    if (welcomeEvent && !welcomeEventPublic) {
+      return events.filter((event) => event.type !== "welcome")
+    }
+    return events
+  }
 
   const connect = (lastKnownId) => {
     if (connections.size > maxConnectionAllowed) {
@@ -49,7 +57,7 @@ export const createSSERoom = ({
 
     const events = [
       // send events which occured between lastKnownId & now
-      ...(lastKnownId === undefined ? [] : eventHistory.since(lastKnownId)),
+      ...(lastKnownId === undefined ? [] : eventsSince(lastKnownId)),
       firstEvent,
     ]
 
@@ -83,8 +91,6 @@ export const createSSERoom = ({
     logger.debug(
       `client joined, number of client connected to event source: ${connections.size}, max allowed: ${maxConnectionAllowed}`,
     )
-
-    onConnect()
 
     return {
       status: 200,
@@ -142,9 +148,13 @@ export const createSSERoom = ({
     state = "stopped"
   }
 
-  const eventsSince = (id) => eventHistory.since(id)
-
-  return { start, stop, connect, eventsSince, sendEvent }
+  return {
+    start,
+    stop,
+    connect,
+    eventsSince,
+    sendEvent,
+  }
 }
 
 // https://github.com/dmail-old/project/commit/da7d2c88fc8273850812972885d030a22f9d7448
@@ -185,8 +195,8 @@ const createEventHistory = (limit) => {
   }
 
   const since = (id) => {
-    const index = events.findIndex((event) => event.id === id)
-    return index === -1 ? [] : events.slice(index)
+    const index = events.findIndex((event) => String(event.id) === id)
+    return index === -1 ? [] : events.slice(index + 1)
   }
 
   const reset = () => {
