@@ -73,8 +73,17 @@ export const fetchUrl = async (
       ...options,
     })
   } catch (e) {
-    if (cancelError && e.name === "AbortError") {
-      throw cancelError
+    if (e.message.includes("reason: connect ECONNRESET")) {
+      if (cancelError) {
+        throw cancelError
+      }
+      throw e
+    }
+    if (e.name === "AbortError") {
+      if (cancelError) {
+        throw cancelError
+      }
+      throw e
     }
     throw e
   }
