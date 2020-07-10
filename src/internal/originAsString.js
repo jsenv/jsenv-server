@@ -5,14 +5,22 @@ export const originAsString = ({ protocol, ip, port }) => {
   const url = new URL("https://127.0.0.1:80")
 
   url.protocol = protocol
-  url.hostname = ipToExternalIp(ip)
+  url.hostname = ipToHostname(ip)
   url.port = port
+
   return url.origin
 }
 
-const ipToExternalIp = (ip) => {
-  if (ip === "0.0.0.0") return getExternalIp() || "0.0.0.0"
-
+const ipToHostname = (
+  ip,
+  { preferLocalhost = true, preferLocalIp = false, preferExternalIp = false } = {},
+) => {
+  if (ip === "0.0.0.0") {
+    if (preferLocalhost) return "localhost"
+    if (preferLocalIp) return "127.0.0.1"
+    if (preferExternalIp) return getExternalIp(ip) || "0.0.0.0"
+    return "0.0.0.0"
+  }
   return ip
 }
 
