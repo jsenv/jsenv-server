@@ -4,6 +4,7 @@
 - [startServer parameters](#startServer-parameters)
   - [http2](#http2)
   - [http1Allowed](#http1Allowed)
+  - [redirectHttpToHttps](#redirectHttpToHttps)
   - [protocol](#protocol)
   - [privateKey](#privateKey)
   - [certificate](#certificate)
@@ -63,6 +64,10 @@ const server = await startServer({
 `http1Allowed` parameter is a boolean controlling if server accepts client requesting it using http1 even if server was started with http2 parameter enabled. This parameter is optional and enabled by default.
 
 — see [allowHTTP1 documentation on Node.js](https://nodejs.org/dist/latest-v13.x/docs/api/http2.html#http2_http2_createsecureserver_options_onrequesthandler)
+
+## redirectHttpToHttps
+
+`redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made to http to https. This parameter is optional and disabled by default.
 
 ## protocol
 

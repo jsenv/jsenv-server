@@ -3,7 +3,7 @@
 - [serveFile example](#serveFile-example)
 - [serveFile and requestToResponse](#serveFile-and-requestToResponse)
 - [serveFile parameters](#serveFile-parameters)
-  - [path](#path)
+  - [source](#source)
   - [method](#method)
   - [headers](#headers)
   - [cacheStrategy](#cacheStrategy)
