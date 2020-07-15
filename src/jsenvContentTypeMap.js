@@ -5,6 +5,9 @@ export const jsenvContentTypeMap = {
   "application/json": {
     extensions: ["json"],
   },
+  "application/importmap+json": {
+    extensions: ["importmap"],
+  },
   "application/octet-stream": {},
   "application/pdf": {
     extensions: ["pdf"],
