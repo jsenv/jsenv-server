@@ -2,7 +2,7 @@
 /.vscode/settings.json
 /coverage/
 /node_modules/
-/importMap.json
+/import-map.importmap
 /jsconfig.json
 /secrets.json
 /package-lock.json
