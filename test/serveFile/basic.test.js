@@ -13,7 +13,7 @@ const expected = {
   status: 200,
   statusText: undefined,
   headers: {
-    "cache-control": "private",
+    "cache-control": "private,max-age=0,must-revalidate",
     "content-type": "application/javascript",
     "content-length": sourceBuffer.length,
     "etag": bufferToEtag(sourceBuffer),
