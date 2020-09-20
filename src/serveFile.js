@@ -23,11 +23,14 @@ export const serveFile = async (
     contentTypeMap = jsenvContentTypeMap,
     etagEnabled = false,
     mtimeEnabled = false,
-    cacheControl = etagEnabled || mtimeEnabled ? "private" : "no-cache",
+    cacheControl = etagEnabled || mtimeEnabled ? "private" : "no-store",
     canReadDirectory = false,
   } = {},
 ) => {
-  if (cacheControl === "no-cache" || cacheControl === "no-store") {
+  // here you might be tempted to add || cacheControl === 'no-cache'
+  // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
+  if (cacheControl === "no-store") {
     if (etagEnabled) {
       console.warn(`cannot enable etag when cache-control is ${cacheControl}`)
       etagEnabled = false
@@ -95,10 +98,10 @@ export const serveFile = async (
           ...(cacheControl ? { "cache-control": cacheControl } : {}),
           // even if client cache is disabled, server can still
           // send his own cache control but client should just ignore it
-          // and keep sending cache-control: 'no-cache'
+          // and keep sending cache-control: 'no-store'
           // if not, uncomment the line below to preserve client
           // desired to ignore cache
-          // ...(headers["cache-control"] === "no-cache" ? { "cache-control": "no-cache" } : {}),
+          // ...(headers["cache-control"] === "no-store" ? { "cache-control": "no-store" } : {}),
         },
       },
       rawResponse,
@@ -110,7 +113,10 @@ export const serveFile = async (
 }
 
 const getClientCacheResponse = async ({ headers, etagEnabled, mtimeEnabled, ...rest }) => {
-  if (headers["cache-control"] === "no-cache") {
+  // here you might be tempted to add || headers["cache-control"] === "no-cache"
+  // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
+  if (headers["cache-control"] === "no-store") {
     return { status: 200 }
   }
 

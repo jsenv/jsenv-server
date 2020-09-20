@@ -438,7 +438,10 @@ ${request.method} ${request.origin}${request.ressource}`)
           }
         }
 
-        timeout = setTimeout(() => requestWaitingCallback(request, { logger, requestWaitingMs }))
+        timeout = setTimeout(
+          () => requestWaitingCallback(request, { logger, requestWaitingMs }),
+          requestWaitingMs,
+        )
 
         const responseProperties = await requestToResponse(request)
         clearTimeout(timeout)

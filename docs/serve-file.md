@@ -88,7 +88,7 @@ const response = await serveFile("/Users/you/folder/index.html", {
 
 ## cacheControl
 
-`cacheControl` parameter is a string that will become the response `cache-control` header value. This parameter is optional with a default value of `"no-cache"`. When `etagEnabled` or `mtimeEnabled` is true, this parameter default value is `"private"`
+`cacheControl` parameter is a string that will become the response `cache-control` header value. This parameter is optional with a default value of `"no-store"`. When `etagEnabled` or `mtimeEnabled` is true, this parameter default value is `"private"`
 
 Check https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control for more information about this header.
 
