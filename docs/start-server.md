@@ -29,6 +29,8 @@
   - [stopOnExit](#stopOnExit)
   - [stopOnInternalError](#stopOnInternalError)
   - [keepProcessAlive](#keepProcessAlive)
+  - [requestWaitingCallback](#requestWaitingCallback)
+  - [requestWaitingMs](#requestWaitingMs)
   - [startedCallback](#startedCallback)
   - [stoppedCallback](#stoppedCallback)
 - [startServer return value](#startServer-return-value)
@@ -289,9 +291,17 @@ SIGINT occurs when you hit ctrl+c in your terminal for instance.
 
 ## keepProcessAlive
 
-`keepProcessAlive` parameter is a boolean controlling if server keeps the process alive. This parameters is otional with a default value of `true`.
+`keepProcessAlive` parameter is a boolean controlling if server keeps the process alive. This parameter is otional with a default value of `true`.
 
 When false, if nothing keeps the process alive node process will end even if your server is still listening.
+
+## requestWaitingCallback
+
+`requestWaitingCallback` parameter is a function called when a request is waiting for a long time. This parameter is optional with a default value logging a warning in the console.
+
+## requestWaitingMs
+
+`requestWaitingMs` parameter is a number of milliseconds after which the request is considered as waiting. This parameter is optional with a default value of 20 seconds.
 
 ## startedCallback
 
