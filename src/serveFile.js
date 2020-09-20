@@ -25,6 +25,7 @@ export const serveFile = async (
     mtimeEnabled = false,
     cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
     canReadDirectory = false,
+    readableStreamLifetimeInSeconds = 5,
   } = {},
 ) => {
   // here you might be tempted to add || cacheControl === 'no-cache'
@@ -91,6 +92,22 @@ export const serveFile = async (
       sourceStat,
       sourceUrl,
     })
+
+    // do not keep readable stream opened on that file
+    // otherwise file is kept open forever.
+    // moreover it will prevent to unlink the file on windows.
+    if (clientCacheResponse.body) {
+      rawResponse.body.destroy()
+    } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
+      // safe measure, ensure the readable stream gets used in the next 5s otherwise destroys it
+      const timeout = setTimeout(() => {
+        rawResponse.body.destroy()
+      }, readableStreamLifetimeInSeconds * 1000)
+      onceReadableStreamUsedOrClosed(rawResponse.body, () => {
+        clearTimeout(timeout)
+      })
+    }
+
     return composeResponse(
       {
         timing: readStatTiming,
@@ -249,8 +266,18 @@ const getRawResponse = async ({
       "content-type": urlToContentType(sourceUrl, contentTypeMap),
       "content-length": sourceStat.size,
     },
-    body: createReadStream(urlToFileSystemPath(sourceUrl)),
+    body: createReadStream(urlToFileSystemPath(sourceUrl), { emitClose: true }),
   }
+}
+
+const onceReadableStreamUsedOrClosed = (readableStream, callback) => {
+  const dataOrCloseCallback = () => {
+    readableStream.removeListener("data", dataOrCloseCallback)
+    readableStream.removeListener("close", dataOrCloseCallback)
+    callback()
+  }
+  readableStream.on("data", dataOrCloseCallback)
+  readableStream.on("close", dataOrCloseCallback)
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toUTCString

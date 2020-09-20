@@ -1,6 +1,6 @@
 {
   "name": "@jsenv/server",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "High level api for node.js server.",
   "license": "MIT",
   "repository": {
@@ -49,7 +49,7 @@
     "@jsenv/cancellation": "1.4.2",
     "@jsenv/logger": "3.3.1",
     "@jsenv/node-signals": "2.0.1",
-    "@jsenv/util": "3.7.0",
+    "@jsenv/util": "3.7.3",
     "abort-controller": "3.0.0",
     "kill-port": "1.6.1",
     "node-fetch": "2.6.1"
