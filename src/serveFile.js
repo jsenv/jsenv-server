@@ -23,7 +23,7 @@ export const serveFile = async (
     contentTypeMap = jsenvContentTypeMap,
     etagEnabled = false,
     mtimeEnabled = false,
-    cacheControl = etagEnabled || mtimeEnabled ? "private" : "no-store",
+    cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
     canReadDirectory = false,
   } = {},
 ) => {
