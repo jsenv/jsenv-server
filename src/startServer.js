@@ -44,8 +44,6 @@ import { timeFunction, timingToServerTimingResponseHeaders } from "./serverTimin
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
 
-const requestTooLongWarningTimeout = 10000
-
 export const startServer = async ({
   cancellationToken = createCancellationToken(),
   logLevel,
@@ -102,6 +100,19 @@ export const startServer = async ({
       body,
     }
   },
+
+  requestWaitingMs = 20000,
+  requestWaitingCallback = (request, { logger }) => {
+    logger.warn(
+      `still no response found for request after ${requestWaitingMs} ms
+--- request url ---
+${request.origin}${request.ressource}
+--- request headers ---
+${JSON.stringify(request.headers, null, "  ")}
+`,
+    )
+  },
+
   startedCallback = () => {},
   stoppedCallback = () => {},
   errorIsCancellation = () => false,
@@ -427,16 +438,10 @@ ${request.method} ${request.origin}${request.ressource}`)
           }
         }
 
-        timeout = setTimeout(() => {
-          logger.warn(
-            `still no response found for request after ${requestTooLongWarningTimeout} ms
---- request url ---
-${request.origin}${request.ressource}
---- request headers ---
-${JSON.stringify(request.headers, null, "  ")}
-`,
-          )
-        }, requestTooLongWarningTimeout)
+        timeout = setTimeout(
+          () => requestWaitingCallback(request, { logger, requestWaitingMs }),
+          requestWaitingMs,
+        )
 
         const responseProperties = await requestToResponse(request)
         clearTimeout(timeout)

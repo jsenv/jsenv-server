@@ -6,17 +6,20 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 const sourceUrl = resolveUrl("./file.js?ok=true", testDirectoryUrl)
 
 const actual = await serveFile(sourceUrl, {
-  cacheStrategy: "etag",
+  etagEnabled: true,
 })
 const sourceBuffer = Buffer.from(await readFile(sourceUrl))
 const expected = {
   status: 200,
+  statusText: undefined,
   headers: {
-    "content-length": sourceBuffer.length,
+    "cache-control": "private",
     "content-type": "application/javascript",
+    "content-length": sourceBuffer.length,
     "etag": bufferToEtag(sourceBuffer),
   },
   body: sourceBuffer,
+  bodyEncoding: undefined,
   timing: {
     "file service>read file stat": actual.timing["file service>read file stat"],
     "file service>read file": actual.timing["file service>read file"],
