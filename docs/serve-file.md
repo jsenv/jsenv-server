@@ -6,8 +6,10 @@
   - [source](#source)
   - [method](#method)
   - [headers](#headers)
-  - [cacheStrategy](#cacheStrategy)
   - [contentTypeMap](#contentTypeMap)
+  - [cacheControl](#cacheControl)
+  - [etagEnabled](#etagEnabled)
+  - [mtimeEnabled](#mtimeEnabled)
   - [canReadDirectory](#canReadDirectory)
 
 # serveFile example
@@ -62,19 +64,11 @@ When method is not `"HEAD"` or `"GET"` the returned response correspond to `501 
 
 `headers` parameter is an object representing http request headers. This parameter is optional with a default value of `{}`.
 
-Two header might be checked in this optionnal object: `if-modified-since` and `if-none-match`. They will be checked according to `cacheStrategy` below.
-
-## cacheStrategy
-
-`cacheStrategy` parameter is a string controlling if server check `headers` parameter and add headers for cache in response. This parameter is optional with a default value of `"etag"`.
-
-When `"mtime"`: response will contain `"last-modified"` header<br />
-When `"etag"`: response will contain `"etag"` header<br />
-When `"none"`: response will contain `"cache-control": "no-store"` header<br />
+Two header might be checked in this optionnal object: `if-modified-since` and `if-none-match`. They will be checked according to `etagEnabled` and `mtimeEnabled` parameters.
 
 ## contentTypeMap
 
-`contentTypeMap` parameteris is an object used to get content type from an url. This parameter is optional with a default value coming from [src/jsenvContentTypeMap.js](../src/jsenvContentTypeMap.js).
+`contentTypeMap` parameter is an object used to get content type from an url. This parameter is optional with a default value coming from [src/jsenvContentTypeMap.js](../src/jsenvContentTypeMap.js).
 
 You can extend `contentTypeMap` to add or replace contentTypes mapping like this:
 
@@ -91,6 +85,20 @@ const response = await serveFile("/Users/you/folder/index.html", {
   },
 })
 ```
+
+## cacheControl
+
+`cacheControl` parameter is a string that will become the response `cache-control` header value. This parameter is optional with a default value of `"no-cache"`. When `etagEnabled` or `mtimeEnabled` is true, this parameter default value is `"private"`
+
+Check https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control for more information about this header.
+
+## etagEnabled
+
+`etagEnabled` parameter is a boolean enabling `etag` headers. When enabled server sends `etag` response header and check presence of `if-none-match` on request headers to produce 304 response when file content has not been modified since the last request. 304 means file content still matches the previous etag. This parameter is optional and disabled by default.
+
+### mtimeEnabled
+
+`mtimeEnabled` parameter is a boolean enabled `mtime` headers. When enabled server sends `last-modified` response header and check presence of `if-modified-since` on request headers to be to produce 304 response when file has not been modified since the last request. 304 means file modification time on the filesystem is equal of before the previous modification time. This parameter is optional and disabled by default.
 
 ## canReadDirectory
 

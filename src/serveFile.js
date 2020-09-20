@@ -10,6 +10,7 @@ import { timeFunction } from "./serverTiming.js"
 import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemErrorToResponseProperties.js"
 import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
+import { composeResponse } from "./composeResponse.js"
 
 const { readFile } = promises
 
@@ -19,11 +20,28 @@ export const serveFile = async (
     cancellationToken = createCancellationToken(),
     method = "GET",
     headers = {},
-    canReadDirectory = false,
-    cacheStrategy = "etag",
     contentTypeMap = jsenvContentTypeMap,
+    etagEnabled = false,
+    mtimeEnabled = false,
+    cacheControl = etagEnabled || mtimeEnabled ? "private" : "no-cache",
+    canReadDirectory = false,
   } = {},
 ) => {
+  if (cacheControl === "no-cache" || cacheControl === "no-store") {
+    if (etagEnabled) {
+      console.warn(`cannot enable etag when cache-control is ${cacheControl}`)
+      etagEnabled = false
+    }
+    if (mtimeEnabled) {
+      console.warn(`cannot enable mtime when cache-control is ${cacheControl}`)
+      mtimeEnabled = false
+    }
+  }
+  if (etagEnabled && mtimeEnabled) {
+    console.warn(`cannot enable both etag and mtime, mtime disabled in favor of etag.`)
+    mtimeEnabled = false
+  }
+
   if (method !== "GET" && method !== "HEAD") {
     return {
       status: 501,
@@ -31,145 +49,201 @@ export const serveFile = async (
   }
 
   const sourceUrl = assertAndNormalizeFileUrl(source)
-  const clientCacheDisabled = headers["cache-control"] === "no-cache"
 
   try {
-    const cacheWithMtime = !clientCacheDisabled && cacheStrategy === "mtime"
-    const cacheWithETag = !clientCacheDisabled && cacheStrategy === "etag"
-    const cachedDisabled = clientCacheDisabled || cacheStrategy === "none"
-
     const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () =>
       statSync(urlToFileSystemPath(sourceUrl)),
     )
 
-    if (sourceStat.isDirectory()) {
-      if (canReadDirectory === false) {
-        return {
-          status: 403,
-          statusText: "not allowed to read directory",
-          headers: {
-            ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-          },
+    const clientCacheResponse = await getClientCacheResponse({
+      cancellationToken,
+      etagEnabled,
+      mtimeEnabled,
+      method,
+      headers,
+      sourceStat,
+      sourceUrl,
+    })
+
+    // send 304 (redirect response to client cache)
+    // because the response body does not have to be transmitted
+    if (clientCacheResponse.status === 304) {
+      return composeResponse(
+        {
           timing: readStatTiming,
-        }
-      }
-
-      const [readDirectoryTiming, directoryContentArray] = await timeFunction(
-        "file service>read directory",
-        () =>
-          createOperation({
-            cancellationToken,
-            start: () => readDirectory(sourceUrl),
-          }),
+          headers: {
+            ...(cacheControl ? { "cache-control": cacheControl } : {}),
+          },
+        },
+        clientCacheResponse,
       )
-      const directoryContentJson = JSON.stringify(directoryContentArray)
-
-      return {
-        status: 200,
-        headers: {
-          ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-          "content-type": "application/json",
-          "content-length": directoryContentJson.length,
-        },
-        body: directoryContentJson,
-        timing: {
-          ...readStatTiming,
-          ...readDirectoryTiming,
-        },
-      }
     }
 
-    // not a file, give up
-    if (!sourceStat.isFile()) {
-      return {
-        status: 404,
-        headers: {
-          ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-        },
+    const rawResponse = await getRawResponse({
+      cancellationToken,
+      canReadDirectory,
+      contentTypeMap,
+      method,
+      headers,
+      sourceStat,
+      sourceUrl,
+    })
+    return composeResponse(
+      {
         timing: readStatTiming,
-      }
-    }
-
-    if (cacheWithETag) {
-      const [readFileTiming, fileContentAsBuffer] = await timeFunction(
-        "file service>read file",
-        () =>
-          createOperation({
-            cancellationToken,
-            start: () => readFile(urlToFileSystemPath(sourceUrl)),
-          }),
-      )
-      const [
-        computeEtagTiming,
-        fileContentEtag,
-      ] = await timeFunction("file service>generate file etag", () =>
-        bufferToEtag(fileContentAsBuffer),
-      )
-
-      if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
-        return {
-          status: 304,
-          headers: {
-            ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-          },
-          timing: {
-            ...readStatTiming,
-            ...readFileTiming,
-            ...computeEtagTiming,
-          },
-        }
-      }
-
-      return {
-        status: 200,
         headers: {
-          ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-          "content-length": sourceStat.size,
-          "content-type": urlToContentType(sourceUrl, contentTypeMap),
-          "etag": fileContentEtag,
+          ...(cacheControl ? { "cache-control": cacheControl } : {}),
+          // even if client cache is disabled, server can still
+          // send his own cache control but client should just ignore it
+          // and keep sending cache-control: 'no-cache'
+          // if not, uncomment the line below to preserve client
+          // desired to ignore cache
+          // ...(headers["cache-control"] === "no-cache" ? { "cache-control": "no-cache" } : {}),
         },
-        body: fileContentAsBuffer,
-        timing: {
-          ...readStatTiming,
-          ...readFileTiming,
-          ...computeEtagTiming,
-        },
+      },
+      rawResponse,
+      clientCacheResponse,
+    )
+  } catch (e) {
+    return convertFileSystemErrorToResponseProperties(e)
+  }
+}
+
+const getClientCacheResponse = async ({ headers, etagEnabled, mtimeEnabled, ...rest }) => {
+  if (headers["cache-control"] === "no-cache") {
+    return { status: 200 }
+  }
+
+  if (etagEnabled) {
+    return getEtagResponse({
+      headers,
+      ...rest,
+    })
+  }
+
+  if (mtimeEnabled) {
+    return getMtimeResponse({
+      headers,
+      ...rest,
+    })
+  }
+
+  return { status: 200 }
+}
+
+const getEtagResponse = async ({ cancellationToken, sourceUrl, headers }) => {
+  const [readFileTiming, fileContentAsBuffer] = await timeFunction("file service>read file", () =>
+    createOperation({
+      cancellationToken,
+      start: () => readFile(urlToFileSystemPath(sourceUrl)),
+    }),
+  )
+  const [computeEtagTiming, fileContentEtag] = await timeFunction(
+    "file service>generate file etag",
+    () => bufferToEtag(fileContentAsBuffer),
+  )
+
+  if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
+    return {
+      status: 304,
+      timing: {
+        ...readFileTiming,
+        ...computeEtagTiming,
+      },
+    }
+  }
+
+  return {
+    status: 200,
+    headers: {
+      etag: fileContentEtag,
+    },
+    body: fileContentAsBuffer,
+    timing: {
+      ...readFileTiming,
+      ...computeEtagTiming,
+    },
+  }
+}
+
+const getMtimeResponse = async ({ sourceStat, headers }) => {
+  if ("if-modified-since" in headers) {
+    let cachedModificationDate
+    try {
+      cachedModificationDate = new Date(headers["if-modified-since"])
+    } catch (e) {
+      return {
+        status: 400,
+        statusText: "if-modified-since header is not a valid date",
       }
     }
 
-    if (cacheWithMtime && "if-modified-since" in headers) {
-      let cachedModificationDate
-      try {
-        cachedModificationDate = new Date(headers["if-modified-since"])
-      } catch (e) {
-        return {
-          status: 400,
-          statusText: "if-modified-since header is not a valid date",
-        }
-      }
-
-      const actualModificationDate = dateToSecondsPrecision(sourceStat.mtime)
-      if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
-        return {
-          status: 304,
-          timing: readStatTiming,
-        }
+    const actualModificationDate = dateToSecondsPrecision(sourceStat.mtime)
+    if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
+      return {
+        status: 304,
       }
     }
+  }
+
+  return {
+    status: 200,
+    headers: {
+      "last-modified": dateToUTCString(sourceStat.mtime),
+    },
+  }
+}
+
+const getRawResponse = async ({
+  cancellationToken,
+  sourceStat,
+  sourceUrl,
+  canReadDirectory,
+  contentTypeMap,
+}) => {
+  if (sourceStat.isDirectory()) {
+    if (canReadDirectory === false) {
+      return {
+        status: 403,
+        statusText: "not allowed to read directory",
+      }
+    }
+
+    const [readDirectoryTiming, directoryContentArray] = await timeFunction(
+      "file service>read directory",
+      () =>
+        createOperation({
+          cancellationToken,
+          start: () => readDirectory(sourceUrl),
+        }),
+    )
+    const directoryContentJson = JSON.stringify(directoryContentArray)
 
     return {
       status: 200,
       headers: {
-        ...(cachedDisabled ? { "cache-control": "no-store" } : {}),
-        ...(cacheWithMtime ? { "last-modified": dateToUTCString(sourceStat.mtime) } : {}),
-        "content-length": sourceStat.size,
-        "content-type": urlToContentType(sourceUrl, contentTypeMap),
+        "content-type": "application/json",
+        "content-length": directoryContentJson.length,
       },
-      body: createReadStream(urlToFileSystemPath(sourceUrl)),
-      timing: readStatTiming,
+      body: directoryContentJson,
+      timing: readDirectoryTiming,
     }
-  } catch (e) {
-    return convertFileSystemErrorToResponseProperties(e)
+  }
+
+  // not a file, give up
+  if (!sourceStat.isFile()) {
+    return {
+      status: 404,
+    }
+  }
+
+  return {
+    status: 200,
+    headers: {
+      "content-type": urlToContentType(sourceUrl, contentTypeMap),
+      "content-length": sourceStat.size,
+    },
+    body: createReadStream(urlToFileSystemPath(sourceUrl)),
   }
 }
 
