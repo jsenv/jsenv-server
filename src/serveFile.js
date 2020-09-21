@@ -99,8 +99,11 @@ export const serveFile = async (
     if (clientCacheResponse.body) {
       rawResponse.body.destroy()
     } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
-      // safe measure, ensure the readable stream gets used in the next 5s otherwise destroys it
+      // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
       const timeout = setTimeout(() => {
+        console.warn(
+          `readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`,
+        )
         rawResponse.body.destroy()
       }, readableStreamLifetimeInSeconds * 1000)
       onceReadableStreamUsedOrClosed(rawResponse.body, () => {
