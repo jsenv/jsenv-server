@@ -154,6 +154,13 @@ ${JSON.stringify(request.headers, null, "  ")}
     const logger = createLogger({ logLevel })
     if (redirectHttpToHttps && protocol === "http") {
       logger.warn(`redirectHttpToHttps ignored because protocol is http`)
+      redirectHttpToHttps = false
+    }
+    if (redirectHttpToHttps && http2) {
+      logger.warn(
+        `redirectHttpToHttps ignored because it does not work with http2. see https://github.com/nodejs/node/issues/23331`,
+      )
+      redirectHttpToHttps = false
     }
 
     const onError = (error) => {
@@ -284,7 +291,7 @@ ${JSON.stringify(request.headers, null, "  ")}
       if (!nagle) {
         nodeRequest.connection.setNoDelay(true)
       }
-      if (redirectHttpToHttps && protocol === "http2" && !nodeRequest.connection.encrypted) {
+      if (redirectHttpToHttps && !nodeRequest.connection.encrypted) {
         nodeResponse.writeHead(301, {
           location: `${serverOrigin}${nodeRequest.ressource}`,
         })
