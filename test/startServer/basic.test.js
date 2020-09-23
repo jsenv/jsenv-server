@@ -19,13 +19,13 @@ const { origin } = await startServer({
 })
 {
   const actual = origin
-  const expected = "http://127.0.0.1:8998"
+  const expected = "http://localhost:8998"
   assert({ actual, expected })
 }
 {
   const actual = await fetchUrl(origin, { simplified: true })
   const expected = {
-    url: `http://127.0.0.1:8998/`,
+    url: `http://localhost:8998/`,
     status: 200,
     statusText: "OK",
     headers: {
