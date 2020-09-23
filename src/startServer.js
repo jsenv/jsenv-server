@@ -22,7 +22,7 @@ import { nodeRequestToRequest } from "./internal/nodeRequestToRequest.js"
 import { composeResponseHeaders } from "./internal/composeResponseHeaders.js"
 import { populateNodeResponse } from "./internal/populateNodeResponse.js"
 import { colorizeResponseStatus } from "./internal/colorizeResponseStatus.js"
-import { originAsString } from "./internal/originAsString.js"
+import { getServerOrigins } from "./internal/getServerOrigins.js"
 import { listen, stopListening } from "./internal/listen.js"
 import { composeResponse } from "./composeResponse.js"
 import {
@@ -265,7 +265,8 @@ ${JSON.stringify(request.headers, null, "  ")}
 
     port = await startOperation
     status = "opened"
-    const serverOrigin = originAsString({ protocol, ip, port })
+    const serverOrigins = getServerOrigins({ protocol, ip, port })
+    const serverOrigin = serverOrigins.main
 
     const connectionsTracker = trackServerPendingConnections(nodeServer, {
       http2,
@@ -383,7 +384,7 @@ ${request.method} ${request.origin}${request.ressource}`)
     // ensure we don't try to handle new requests while server is stopping
     registerCleanupCallback(removeRequestListener)
 
-    logger.info(`${serverName} started at ${serverOrigin}`)
+    logger.info(`${serverName} started at ${serverOrigin} (${serverOrigins.external})`)
     startedCallback({ origin: serverOrigin })
 
     const corsEnabled = accessControlAllowRequestOrigin || accessControlAllowedOrigins.length

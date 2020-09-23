@@ -1,7 +1,14 @@
 import { networkInterfaces } from "os"
 import { URL } from "url"
 
-export const originAsString = ({ protocol, ip, port }) => {
+export const getServerOrigins = ({ protocol, ip, port }) => {
+  return {
+    main: createServerOrigin({ protocol, ip, port }),
+    external: createServerOrigin({ protocol, ip: getExternalIp(ip), port }),
+  }
+}
+
+const createServerOrigin = ({ protocol, ip, port }) => {
   const url = new URL("https://127.0.0.1:80")
 
   url.protocol = protocol
@@ -15,7 +22,7 @@ const ipToHostname = (
   ip,
   { preferLocalhost = true, preferLocalIp = false, preferExternalIp = false } = {},
 ) => {
-  if (ip === "0.0.0.0") {
+  if (ip === "0.0.0.0" || !ip) {
     if (preferLocalhost) return "localhost"
     if (preferLocalIp) return "127.0.0.1"
     if (preferExternalIp) return getExternalIp(ip) || "0.0.0.0"
