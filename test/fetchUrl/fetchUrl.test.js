@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { resolveUrl, writeFile, ensureEmptyDirectory } from "@jsenv/util"
+import { resolveUrl, writeFile, ensureEmptyDirectory, urlToFileSystemPath } from "@jsenv/util"
 import { fetchUrl, startServer } from "../../index.js"
 import { createCancellationSource } from "@jsenv/cancellation"
 
@@ -36,7 +36,7 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   const expected = {
     url,
     status: 404,
-    statusText: "file not found",
+    statusText: `ENOENT: File not found at ${urlToFileSystemPath(url)}`,
     headers: {},
     body: "",
   }
