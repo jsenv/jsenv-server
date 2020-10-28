@@ -2,11 +2,25 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
+var module$1 = require('module');
+var https = require('https');
+var fs = require('fs');
+var url$1 = require('url');
+var crypto = require('crypto');
+var path = require('path');
+var util = require('util');
+var perf_hooks = require('perf_hooks');
+var net = require('net');
+var http = require('http');
+var stream = require('stream');
+var os = require('os');
+
 function _interopNamespace(e) {
-  if (e && e.__esModule) { return e; } else {
-    var n = {};
-    if (e) {
-      Object.keys(e).forEach(function (k) {
+  if (e && e.__esModule) return e;
+  var n = Object.create(null);
+  if (e) {
+    Object.keys(e).forEach(function (k) {
+      if (k !== 'default') {
         var d = Object.getOwnPropertyDescriptor(e, k);
         Object.defineProperty(n, k, d.get ? d : {
           enumerable: true,
@@ -14,22 +28,12 @@ function _interopNamespace(e) {
             return e[k];
           }
         });
-      });
-    }
-    n['default'] = e;
-    return n;
+      }
+    });
   }
+  n['default'] = e;
+  return Object.freeze(n);
 }
-
-var module$1 = require('module');
-var fs = require('fs');
-var url$1 = require('url');
-var crypto = require('crypto');
-var path = require('path');
-var util = require('util');
-var net = require('net');
-var http = require('http');
-var stream = require('stream');
 
 const acceptsContentType = (acceptHeader, contentType) => {
   if (typeof acceptHeader !== "string") {
@@ -98,9 +102,9 @@ const compositionMappingToComposeStrict = (compositionMapping, createInitial = (
 
 const compositionMappingToStrictReducer = compositionMapping => {
   const propertyComposeStrict = (key, previous, current) => {
-    const propertyExistInCurrent = key in current;
+    const propertyExistInCurrent = (key in current);
     if (!propertyExistInCurrent) return previous[key];
-    const propertyExistInPrevious = key in previous;
+    const propertyExistInPrevious = (key in previous);
     if (!propertyExistInPrevious) return current[key];
     const composeProperty = compositionMapping[key];
     return composeProperty(previous[key], current[key]);
@@ -123,11 +127,11 @@ const compositionMappingToCompose = (compositionMapping, createInitial = () => (
 
 const compositionMappingToReducer = compositionMapping => {
   const composeProperty = (key, previous, current) => {
-    const propertyExistInCurrent = key in current;
+    const propertyExistInCurrent = (key in current);
     if (!propertyExistInCurrent) return previous[key];
-    const propertyExistInPrevious = key in previous;
+    const propertyExistInPrevious = (key in previous);
     if (!propertyExistInPrevious) return current[key];
-    const propertyHasComposer = key in compositionMapping;
+    const propertyHasComposer = (key in compositionMapping);
     if (!propertyHasComposer) return current[key];
     const composerForProperty = compositionMapping[key];
     return composerForProperty(previous[key], current[key]);
@@ -161,6 +165,9 @@ const headerCompositionMapping = {
   "access-control-allow-headers": composeHeaderValues,
   "access-control-allow-methods": composeHeaderValues,
   "access-control-allow-origin": composeHeaderValues,
+  // https://www.w3.org/TR/server-timing/
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing
+  "server-timing": composeHeaderValues,
   // 'content-type', // https://github.com/ninenines/cowboy/issues/1230
   "vary": composeHeaderValues
 };
@@ -171,7 +178,12 @@ const responseCompositionMapping = {
   statusText: (prevStatusText, statusText) => statusText,
   headers: composeResponseHeaders,
   body: (prevBody, body) => body,
-  bodyEncoding: (prevEncoding, encoding) => encoding
+  bodyEncoding: (prevEncoding, encoding) => encoding,
+  timing: (prevTiming, timing) => {
+    return { ...prevTiming,
+      ...timing
+    };
+  }
 };
 const composeResponse = compositionMappingToComposeStrict(responseCompositionMapping);
 
@@ -180,21 +192,21 @@ const convertFileSystemErrorToResponseProperties = error => {
   if (isErrorWithCode(error, "EACCES")) {
     return {
       status: 403,
-      statusText: "no permission to read file"
+      statusText: `EACCES: No permission to read file at ${error.path}`
     };
   }
 
   if (isErrorWithCode(error, "EPERM")) {
     return {
       status: 403,
-      statusText: "no permission to read file"
+      statusText: `EPERM: No permission to read file at ${error.path}`
     };
   }
 
   if (isErrorWithCode(error, "ENOENT")) {
     return {
       status: 404,
-      statusText: "file not found"
+      statusText: `ENOENT: File not found at ${error.path}`
     };
   } // file access may be temporarily blocked
   // (by an antivirus scanning it because recently modified for instance)
@@ -203,7 +215,7 @@ const convertFileSystemErrorToResponseProperties = error => {
   if (isErrorWithCode(error, "EBUSY")) {
     return {
       status: 503,
-      statusText: "file is busy",
+      statusText: `EBUSY: File is busy ${error.path}`,
       headers: {
         "retry-after": 0.01 // retry in 10ms
 
@@ -215,7 +227,7 @@ const convertFileSystemErrorToResponseProperties = error => {
   if (isErrorWithCode(error, "EMFILE")) {
     return {
       status: 503,
-      statusText: "too many file opened",
+      statusText: "EMFILE: too many file opened",
       headers: {
         "retry-after": 0.1 // retry in 100ms
 
@@ -226,7 +238,7 @@ const convertFileSystemErrorToResponseProperties = error => {
   if (isErrorWithCode(error, "EISDIR")) {
     return {
       status: 500,
-      statusText: "Unexpected directory operation"
+      statusText: `EISDIR: Unexpected directory operation at ${error.path}`
     };
   }
 
@@ -345,7 +357,9 @@ const subscribe = (observable, {
     error,
     complete
   });
-  return subscription;
+  return subscription || {
+    unsubscribe: () => {}
+  };
 };
 const isObservable = value => {
   if (value === null) return false;
@@ -360,20 +374,33 @@ const createSSERoom = ({
   keepaliveDuration = 30 * 1000,
   retryDuration = 1 * 1000,
   historyLength = 1 * 1000,
-  maxConnectionAllowed = 100 // max 100 users accepted
-
+  maxConnectionAllowed = 100,
+  // max 100 users accepted
+  computeEventId = (event, lastEventId) => lastEventId + 1,
+  welcomeEvent = false,
+  welcomeEventPublic = false
 } = {}) => {
   const logger = createLogger({
     logLevel
   });
-  const connections = new Set(); // what about history that keeps growing ?
-  // we should add some limit
-  // one limit could be that an event older than 24h is be deleted
+  const connections = new Set();
+  const eventHistory = createEventHistory(historyLength); // what about previousEventId that keeps growing ?
+  // we could add some limit
+  // one limit could be that an event older than 24h is deleted
 
-  const history = createEventHistory(historyLength);
-  let previousEventId;
+  let previousEventId = 0;
   let state = "closed";
   let interval;
+
+  const eventsSince = id => {
+    const events = eventHistory.since(id);
+
+    if (welcomeEvent && !welcomeEventPublic) {
+      return events.filter(event => event.type !== "welcome");
+    }
+
+    return events;
+  };
 
   const connect = lastKnownId => {
     if (connections.size > maxConnectionAllowed) {
@@ -388,16 +415,20 @@ const createSSERoom = ({
       };
     }
 
-    const joinEvent = {
-      id: previousEventId === undefined ? 0 : previousEventId + 1,
+    const firstEvent = {
       retry: retryDuration,
-      type: "join",
+      type: welcomeEvent ? "welcome" : "comment",
       data: new Date().toLocaleTimeString()
     };
-    previousEventId = joinEvent.id;
-    history.add(joinEvent);
-    const events = [joinEvent, // send events which occured between lastKnownId & now
-    ...(lastKnownId === undefined ? [] : history.since(lastKnownId))];
+
+    if (welcomeEvent) {
+      firstEvent.id = computeEventId(firstEvent, previousEventId);
+      previousEventId = firstEvent.id;
+      eventHistory.add(firstEvent);
+    }
+
+    const events = [// send events which occured between lastKnownId & now
+    ...(lastKnownId === undefined ? [] : eventsSince(lastKnownId)), firstEvent];
     const body = createObservable({
       subscribe: ({
         next
@@ -427,7 +458,7 @@ const createSSERoom = ({
       status: 200,
       headers: {
         "content-type": "text/event-stream",
-        "cache-control": "no-cache",
+        "cache-control": "no-store",
         "connection": "keep-alive"
       },
       body
@@ -443,9 +474,13 @@ const createSSERoom = ({
   const sendEvent = event => {
     if (event.type !== "comment") {
       logger.debug(`send ${event.type} event, number of client listening event source: ${connections.size}`);
-      event.id = previousEventId === undefined ? 0 : previousEventId + 1;
+
+      if (typeof event.id === "undefined") {
+        event.id = computeEventId(event, previousEventId);
+      }
+
       previousEventId = event.id;
-      history.add(event);
+      eventHistory.add(event);
     }
 
     write(stringifySourceEvent(event));
@@ -469,7 +504,7 @@ const createSSERoom = ({
     logger.debug(`stopping, number of client to close: ${connections.size}`);
     connections.forEach(connection => connection.unsubscribe());
     clearInterval(interval);
-    history.reset();
+    eventHistory.reset();
     state = "stopped";
   };
 
@@ -477,6 +512,7 @@ const createSSERoom = ({
     start,
     stop,
     connect,
+    eventsSince,
     sendEvent
   };
 }; // https://github.com/dmail-old/project/commit/da7d2c88fc8273850812972885d030a22f9d7448
@@ -508,35 +544,24 @@ const stringifySourceEvent = ({
   return string;
 };
 
-const createEventHistory = ({
-  limit
-} = {}) => {
+const createEventHistory = limit => {
   const events = [];
-  let removedCount = 0;
 
   const add = data => {
     events.push(data);
 
     if (events.length >= limit) {
       events.shift();
-      removedCount++;
     }
   };
 
-  const since = index => {
-    index = parseInt(index);
-
-    if (isNaN(index)) {
-      throw new TypeError("history.since() expect a number");
-    }
-
-    index -= removedCount;
-    return index < 0 ? [] : events.slice(index);
+  const since = id => {
+    const index = events.findIndex(event => String(event.id) === id);
+    return index === -1 ? [] : events.slice(index + 1);
   };
 
   const reset = () => {
     events.length = 0;
-    removedCount = 0;
   };
 
   return {
@@ -686,25 +711,22 @@ const firstOperationMatching = ({
     throw new TypeError(`predicate must be a function, got ${predicate}`);
   }
 
-  return new Promise((resolve, reject) => {
-    const visit = index => {
-      if (index >= array.length) {
-        return resolve();
-      }
+  const visit = async index => {
+    if (index >= array.length) {
+      return undefined;
+    }
 
-      const input = array[index];
-      const returnValue = start(input);
-      return Promise.resolve(returnValue).then(output => {
-        if (predicate(output)) {
-          return resolve(output);
-        }
+    const input = array[index];
+    const output = await start(input);
 
-        return visit(index + 1);
-      }, reject);
-    };
+    if (predicate(output)) {
+      return output;
+    }
 
-    visit(0);
-  });
+    return visit(index + 1);
+  };
+
+  return visit(0);
 };
 
 const createCancelError = reason => {
@@ -849,377 +871,6 @@ const createCancellationSource = () => {
     cancel
   };
 };
-
-const ensureUrlTrailingSlash = url => {
-  return url.endsWith("/") ? url : `${url}/`;
-};
-
-const isFileSystemPath = value => {
-  if (typeof value !== "string") {
-    throw new TypeError(`isFileSystemPath first arg must be a string, got ${value}`);
-  }
-
-  if (value[0] === "/") return true;
-  return startsWithWindowsDriveLetter(value);
-};
-
-const startsWithWindowsDriveLetter = string => {
-  const firstChar = string[0];
-  if (!/[a-zA-Z]/.test(firstChar)) return false;
-  const secondChar = string[1];
-  if (secondChar !== ":") return false;
-  return true;
-};
-
-const fileSystemPathToUrl = value => {
-  if (!isFileSystemPath(value)) {
-    throw new Error(`received an invalid value for fileSystemPath: ${value}`);
-  }
-
-  return String(url$1.pathToFileURL(value));
-};
-
-const assertAndNormalizeDirectoryUrl = value => {
-  let urlString;
-
-  if (value instanceof URL) {
-    urlString = value.href;
-  } else if (typeof value === "string") {
-    if (isFileSystemPath(value)) {
-      urlString = fileSystemPathToUrl(value);
-    } else {
-      try {
-        urlString = String(new URL(value));
-      } catch (e) {
-        throw new TypeError(`directoryUrl must be a valid url, received ${value}`);
-      }
-    }
-  } else {
-    throw new TypeError(`directoryUrl must be a string or an url, received ${value}`);
-  }
-
-  if (!urlString.startsWith("file://")) {
-    throw new Error(`directoryUrl must starts with file://, received ${value}`);
-  }
-
-  return ensureUrlTrailingSlash(urlString);
-};
-
-const assertAndNormalizeFileUrl = (value, baseUrl) => {
-  let urlString;
-
-  if (value instanceof URL) {
-    urlString = value.href;
-  } else if (typeof value === "string") {
-    if (isFileSystemPath(value)) {
-      urlString = fileSystemPathToUrl(value);
-    } else {
-      try {
-        urlString = String(new URL(value, baseUrl));
-      } catch (e) {
-        throw new TypeError(`fileUrl must be a valid url, received ${value}`);
-      }
-    }
-  } else {
-    throw new TypeError(`fileUrl must be a string or an url, received ${value}`);
-  }
-
-  if (!urlString.startsWith("file://")) {
-    throw new Error(`fileUrl must starts with file://, received ${value}`);
-  }
-
-  return urlString;
-};
-
-const urlToFileSystemPath = fileUrl => {
-  if (fileUrl[fileUrl.length - 1] === "/") {
-    // remove trailing / so that nodejs path becomes predictable otherwise it logs
-    // the trailing slash on linux but does not on windows
-    fileUrl = fileUrl.slice(0, -1);
-  }
-
-  const fileSystemPath = url$1.fileURLToPath(fileUrl);
-  return fileSystemPath;
-};
-
-// https://github.com/coderaiser/cloudcmd/issues/63#issuecomment-195478143
-// https://nodejs.org/api/fs.html#fs_file_modes
-// https://github.com/TooTallNate/stat-mode
-// cannot get from fs.constants because they are not available on windows
-const S_IRUSR = 256;
-/* 0000400 read permission, owner */
-
-const S_IWUSR = 128;
-/* 0000200 write permission, owner */
-
-const S_IXUSR = 64;
-/* 0000100 execute/search permission, owner */
-
-const S_IRGRP = 32;
-/* 0000040 read permission, group */
-
-const S_IWGRP = 16;
-/* 0000020 write permission, group */
-
-const S_IXGRP = 8;
-/* 0000010 execute/search permission, group */
-
-const S_IROTH = 4;
-/* 0000004 read permission, others */
-
-const S_IWOTH = 2;
-/* 0000002 write permission, others */
-
-const S_IXOTH = 1;
-const permissionsToBinaryFlags = ({
-  owner,
-  group,
-  others
-}) => {
-  let binaryFlags = 0;
-  if (owner.read) binaryFlags |= S_IRUSR;
-  if (owner.write) binaryFlags |= S_IWUSR;
-  if (owner.execute) binaryFlags |= S_IXUSR;
-  if (group.read) binaryFlags |= S_IRGRP;
-  if (group.write) binaryFlags |= S_IWGRP;
-  if (group.execute) binaryFlags |= S_IXGRP;
-  if (others.read) binaryFlags |= S_IROTH;
-  if (others.write) binaryFlags |= S_IWOTH;
-  if (others.execute) binaryFlags |= S_IXOTH;
-  return binaryFlags;
-};
-
-const writeFileSystemNodePermissions = async (source, permissions) => {
-  const sourceUrl = assertAndNormalizeFileUrl(source);
-  const sourcePath = urlToFileSystemPath(sourceUrl);
-  let binaryFlags;
-
-  if (typeof permissions === "object") {
-    permissions = {
-      owner: {
-        read: getPermissionOrComputeDefault("read", "owner", permissions),
-        write: getPermissionOrComputeDefault("write", "owner", permissions),
-        execute: getPermissionOrComputeDefault("execute", "owner", permissions)
-      },
-      group: {
-        read: getPermissionOrComputeDefault("read", "group", permissions),
-        write: getPermissionOrComputeDefault("write", "group", permissions),
-        execute: getPermissionOrComputeDefault("execute", "group", permissions)
-      },
-      others: {
-        read: getPermissionOrComputeDefault("read", "others", permissions),
-        write: getPermissionOrComputeDefault("write", "others", permissions),
-        execute: getPermissionOrComputeDefault("execute", "others", permissions)
-      }
-    };
-    binaryFlags = permissionsToBinaryFlags(permissions);
-  } else {
-    binaryFlags = permissions;
-  }
-
-  return chmodNaive(sourcePath, binaryFlags);
-};
-
-const chmodNaive = (fileSystemPath, binaryFlags) => {
-  return new Promise((resolve, reject) => {
-    fs.chmod(fileSystemPath, binaryFlags, error => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
-  });
-};
-
-const actionLevels = {
-  read: 0,
-  write: 1,
-  execute: 2
-};
-const subjectLevels = {
-  others: 0,
-  group: 1,
-  owner: 2
-};
-
-const getPermissionOrComputeDefault = (action, subject, permissions) => {
-  if (subject in permissions) {
-    const subjectPermissions = permissions[subject];
-
-    if (action in subjectPermissions) {
-      return subjectPermissions[action];
-    }
-
-    const actionLevel = actionLevels[action];
-    const actionFallback = Object.keys(actionLevels).find(actionFallbackCandidate => actionLevels[actionFallbackCandidate] > actionLevel && actionFallbackCandidate in subjectPermissions);
-
-    if (actionFallback) {
-      return subjectPermissions[actionFallback];
-    }
-  }
-
-  const subjectLevel = subjectLevels[subject]; // do we have a subject with a stronger level (group or owner)
-  // where we could read the action permission ?
-
-  const subjectFallback = Object.keys(subjectLevels).find(subjectFallbackCandidate => subjectLevels[subjectFallbackCandidate] > subjectLevel && subjectFallbackCandidate in permissions);
-
-  if (subjectFallback) {
-    const subjectPermissions = permissions[subjectFallback];
-    return action in subjectPermissions ? subjectPermissions[action] : getPermissionOrComputeDefault(action, subjectFallback, permissions);
-  }
-
-  return false;
-};
-
-const isWindows = process.platform === "win32";
-const readFileSystemNodeStat = async (source, {
-  nullIfNotFound = false,
-  followLink = true
-} = {}) => {
-  if (source.endsWith("/")) source = source.slice(0, -1);
-  const sourceUrl = assertAndNormalizeFileUrl(source);
-  const sourcePath = urlToFileSystemPath(sourceUrl);
-  const handleNotFoundOption = nullIfNotFound ? {
-    handleNotFoundError: () => null
-  } : {};
-  return readStat(sourcePath, {
-    followLink,
-    ...handleNotFoundOption,
-    ...(isWindows ? {
-      // Windows can EPERM on stat
-      handlePermissionDeniedError: async error => {
-        // unfortunately it means we mutate the permissions
-        // without being able to restore them to the previous value
-        // (because reading current permission would also throw)
-        try {
-          await writeFileSystemNodePermissions(sourceUrl, 0o666);
-          const stats = await readStat(sourcePath, {
-            followLink,
-            ...handleNotFoundOption,
-            // could not fix the permission error, give up and throw original error
-            handlePermissionDeniedError: () => {
-              throw error;
-            }
-          });
-          return stats;
-        } catch (e) {
-          // failed to write permission or readState, throw original error as well
-          throw error;
-        }
-      }
-    } : {})
-  });
-};
-
-const readStat = (sourcePath, {
-  followLink,
-  handleNotFoundError = null,
-  handlePermissionDeniedError = null
-} = {}) => {
-  const nodeMethod = followLink ? fs.stat : fs.lstat;
-  return new Promise((resolve, reject) => {
-    nodeMethod(sourcePath, (error, statsObject) => {
-      if (error) {
-        if (handlePermissionDeniedError && (error.code === "EPERM" || error.code === "EACCES")) {
-          resolve(handlePermissionDeniedError(error));
-        } else if (handleNotFoundError && error.code === "ENOENT") {
-          resolve(handleNotFoundError(error));
-        } else {
-          reject(error);
-        }
-      } else {
-        resolve(statsObject);
-      }
-    });
-  });
-};
-
-const ETAG_FOR_EMPTY_CONTENT = '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
-const bufferToEtag = buffer => {
-  if (!Buffer.isBuffer(buffer)) {
-    throw new TypeError(`buffer expected, got ${buffer}`);
-  }
-
-  if (buffer.length === 0) {
-    return ETAG_FOR_EMPTY_CONTENT;
-  }
-
-  const hash = crypto.createHash("sha1");
-  hash.update(buffer, "utf8");
-  const hashBase64String = hash.digest("base64");
-  const hashBase64StringSubset = hashBase64String.slice(0, 27);
-  const length = buffer.length;
-  return `"${length.toString(16)}-${hashBase64StringSubset}"`;
-};
-
-const catchCancellation = asyncFn => {
-  return asyncFn().catch(error => {
-    if (isCancelError(error)) {
-      // it means consume of the function will resolve with a cancelError
-      // but when you cancel it means you're not interested in the result anymore
-      // thanks to this it avoid unhandledRejection
-      return error;
-    }
-
-    throw error;
-  });
-};
-
-const readDirectory = async (url, {
-  emfileMaxWait = 1000
-} = {}) => {
-  const directoryUrl = assertAndNormalizeDirectoryUrl(url);
-  const directoryPath = urlToFileSystemPath(directoryUrl);
-  const startMs = Date.now();
-  let attemptCount = 0;
-
-  const attempt = () => {
-    return readdirNaive(directoryPath, {
-      handleTooManyFilesOpenedError: async error => {
-        attemptCount++;
-        const nowMs = Date.now();
-        const timeSpentWaiting = nowMs - startMs;
-
-        if (timeSpentWaiting > emfileMaxWait) {
-          throw error;
-        }
-
-        return new Promise(resolve => {
-          setTimeout(() => {
-            resolve(attempt());
-          }, attemptCount);
-        });
-      }
-    });
-  };
-
-  return attempt();
-};
-
-const readdirNaive = (directoryPath, {
-  handleTooManyFilesOpenedError = null
-} = {}) => {
-  return new Promise((resolve, reject) => {
-    fs.readdir(directoryPath, (error, names) => {
-      if (error) {
-        // https://nodejs.org/dist/latest-v13.x/docs/api/errors.html#errors_common_system_errors
-        if (handleTooManyFilesOpenedError && (error.code === "EMFILE" || error.code === "ENFILE")) {
-          resolve(handleTooManyFilesOpenedError(error));
-        } else {
-          reject(error);
-        }
-      } else {
-        resolve(names);
-      }
-    });
-  });
-};
-
-const isWindows$1 = process.platform === "win32";
-const baseUrlFallback = fileSystemPathToUrl(process.cwd());
-
-const isWindows$2 = process.platform === "win32";
 
 const addCallback = callback => {
   const triggerHangUpOrDeath = () => callback(); // SIGHUP http://man7.org/linux/man-pages/man7/signal.7.html
@@ -1592,6 +1243,268 @@ const unadvisedCrashSignal = {
   addCallback: addCallback$6
 };
 
+const wrapFunctionToCatchCancellation = asyncFunction => async (...args) => {
+  try {
+    const value = await asyncFunction(...args);
+    return value;
+  } catch (error) {
+    if (isCancelError(error)) {
+      // it means consume of the function will resolve with a cancelError
+      // but when you cancel it means you're not interested in the result anymore
+      // thanks to this it avoid unhandledRejection
+      return error;
+    }
+
+    throw error;
+  }
+};
+
+const wrapFunctionToConsiderUnhandledRejectionsAsExceptions = fn => async (...args) => {
+  const uninstall = installUnhandledRejectionMode();
+
+  try {
+    const value = await fn(...args);
+    return value;
+  } finally {
+    // don't remove it immediatly to let nodejs emit the unhandled rejection
+    setTimeout(() => {
+      uninstall();
+    });
+  }
+};
+
+const installUnhandledRejectionMode = () => {
+  const unhandledRejectionArg = getCommandArgument(process.execArgv, "--unhandled-rejections");
+
+  if (unhandledRejectionArg === "strict") {
+    return () => {};
+  }
+
+  if (unhandledRejectionArg === "throw") {
+    return () => {};
+  }
+
+  const onUnhandledRejection = reason => {
+    throw reason;
+  };
+
+  process.once("unhandledRejection", onUnhandledRejection);
+  return () => {
+    console.log("remove");
+    process.removeListener("unhandledRejection", onUnhandledRejection);
+  };
+};
+
+const getCommandArgument = (argv, name) => {
+  let i = 0;
+
+  while (i < argv.length) {
+    const arg = argv[i];
+
+    if (arg === name) {
+      return {
+        name,
+        index: i,
+        value: ""
+      };
+    }
+
+    if (arg.startsWith(`${name}=`)) {
+      return {
+        name,
+        index: i,
+        value: arg.slice(`${name}=`.length)
+      };
+    }
+
+    i++;
+  }
+
+  return null;
+};
+
+const executeAsyncFunction = (fn, {
+  catchCancellation = false,
+  considerUnhandledRejectionsAsExceptions = false
+} = {}) => {
+  if (catchCancellation) {
+    fn = wrapFunctionToCatchCancellation(fn);
+  }
+
+  if (considerUnhandledRejectionsAsExceptions) {
+    fn = wrapFunctionToConsiderUnhandledRejectionsAsExceptions(fn);
+  }
+
+  return fn();
+};
+
+const ensureUrlTrailingSlash = url => {
+  return url.endsWith("/") ? url : `${url}/`;
+};
+
+const isFileSystemPath = value => {
+  if (typeof value !== "string") {
+    throw new TypeError(`isFileSystemPath first arg must be a string, got ${value}`);
+  }
+
+  if (value[0] === "/") return true;
+  return startsWithWindowsDriveLetter(value);
+};
+
+const startsWithWindowsDriveLetter = string => {
+  const firstChar = string[0];
+  if (!/[a-zA-Z]/.test(firstChar)) return false;
+  const secondChar = string[1];
+  if (secondChar !== ":") return false;
+  return true;
+};
+
+const fileSystemPathToUrl = value => {
+  if (!isFileSystemPath(value)) {
+    throw new Error(`received an invalid value for fileSystemPath: ${value}`);
+  }
+
+  return String(url$1.pathToFileURL(value));
+};
+
+const assertAndNormalizeDirectoryUrl = value => {
+  let urlString;
+
+  if (value instanceof URL) {
+    urlString = value.href;
+  } else if (typeof value === "string") {
+    if (isFileSystemPath(value)) {
+      urlString = fileSystemPathToUrl(value);
+    } else {
+      try {
+        urlString = String(new URL(value));
+      } catch (e) {
+        throw new TypeError(`directoryUrl must be a valid url, received ${value}`);
+      }
+    }
+  } else {
+    throw new TypeError(`directoryUrl must be a string or an url, received ${value}`);
+  }
+
+  if (!urlString.startsWith("file://")) {
+    throw new Error(`directoryUrl must starts with file://, received ${value}`);
+  }
+
+  return ensureUrlTrailingSlash(urlString);
+};
+
+const assertAndNormalizeFileUrl = (value, baseUrl) => {
+  let urlString;
+
+  if (value instanceof URL) {
+    urlString = value.href;
+  } else if (typeof value === "string") {
+    if (isFileSystemPath(value)) {
+      urlString = fileSystemPathToUrl(value);
+    } else {
+      try {
+        urlString = String(new URL(value, baseUrl));
+      } catch (e) {
+        throw new TypeError(`fileUrl must be a valid url, received ${value}`);
+      }
+    }
+  } else {
+    throw new TypeError(`fileUrl must be a string or an url, received ${value}`);
+  }
+
+  if (!urlString.startsWith("file://")) {
+    throw new Error(`fileUrl must starts with file://, received ${value}`);
+  }
+
+  return urlString;
+};
+
+const urlToFileSystemPath = fileUrl => {
+  if (fileUrl[fileUrl.length - 1] === "/") {
+    // remove trailing / so that nodejs path becomes predictable otherwise it logs
+    // the trailing slash on linux but does not on windows
+    fileUrl = fileUrl.slice(0, -1);
+  }
+
+  const fileSystemPath = url$1.fileURLToPath(fileUrl);
+  return fileSystemPath;
+};
+
+const isWindows = process.platform === "win32";
+
+const ETAG_FOR_EMPTY_CONTENT = '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
+const bufferToEtag = buffer => {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new TypeError(`buffer expected, got ${buffer}`);
+  }
+
+  if (buffer.length === 0) {
+    return ETAG_FOR_EMPTY_CONTENT;
+  }
+
+  const hash = crypto.createHash("sha1");
+  hash.update(buffer, "utf8");
+  const hashBase64String = hash.digest("base64");
+  const hashBase64StringSubset = hashBase64String.slice(0, 27);
+  const length = buffer.length;
+  return `"${length.toString(16)}-${hashBase64StringSubset}"`;
+};
+
+const readDirectory = async (url, {
+  emfileMaxWait = 1000
+} = {}) => {
+  const directoryUrl = assertAndNormalizeDirectoryUrl(url);
+  const directoryPath = urlToFileSystemPath(directoryUrl);
+  const startMs = Date.now();
+  let attemptCount = 0;
+
+  const attempt = () => {
+    return readdirNaive(directoryPath, {
+      handleTooManyFilesOpenedError: async error => {
+        attemptCount++;
+        const nowMs = Date.now();
+        const timeSpentWaiting = nowMs - startMs;
+
+        if (timeSpentWaiting > emfileMaxWait) {
+          throw error;
+        }
+
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve(attempt());
+          }, attemptCount);
+        });
+      }
+    });
+  };
+
+  return attempt();
+};
+
+const readdirNaive = (directoryPath, {
+  handleTooManyFilesOpenedError = null
+} = {}) => {
+  return new Promise((resolve, reject) => {
+    fs.readdir(directoryPath, (error, names) => {
+      if (error) {
+        // https://nodejs.org/dist/latest-v13.x/docs/api/errors.html#errors_common_system_errors
+        if (handleTooManyFilesOpenedError && (error.code === "EMFILE" || error.code === "ENFILE")) {
+          resolve(handleTooManyFilesOpenedError(error));
+        } else {
+          reject(error);
+        }
+      } else {
+        resolve(names);
+      }
+    });
+  });
+};
+
+const isWindows$1 = process.platform === "win32";
+const baseUrlFallback = fileSystemPathToUrl(process.cwd());
+
+const isWindows$2 = process.platform === "win32";
+
 const memoize = compute => {
   let memoized = false;
   let memoizedValue;
@@ -1625,12 +1538,59 @@ const isWindows$3 = process.platform === "win32";
 /* eslint-disable import/max-dependencies */
 const isLinux = process.platform === "linux"; // linux does not support recursive option
 
+const timeStart = name => {
+  // as specified in https://w3c.github.io/server-timing/#the-performanceservertiming-interface
+  // duration is a https://www.w3.org/TR/hr-time-2/#sec-domhighrestimestamp
+  const startTimestamp = perf_hooks.performance.now();
+
+  const timeEnd = () => {
+    const endTimestamp = perf_hooks.performance.now();
+    const timing = {
+      [name]: endTimestamp - startTimestamp
+    };
+    return timing;
+  };
+
+  return timeEnd;
+};
+const timeFunction = (name, fn) => {
+  const timeEnd = timeStart(name);
+  const returnValue = fn();
+
+  if (returnValue && typeof returnValue.then === "function") {
+    return returnValue.then(value => {
+      return [timeEnd(), value];
+    });
+  }
+
+  return [timeEnd(), returnValue];
+}; // to predict order in chrome devtools we should put a,b,c,d,e or something
+// because in chrome dev tools they are shown in alphabetic order
+// also we should manipulate a timing object instead of a header to facilitate
+// manipulation of the object so that the timing header response generation logic belongs to @jsenv/server
+// so response can return a new timing object
+// yes it's awful, feel free to PR with a better approach :)
+
+const timingToServerTimingResponseHeaders = timing => {
+  const serverTimingValue = Object.keys(timing).map((key, index) => {
+    const time = timing[key];
+    return `${letters[index] || "zz"};desc="${key}";dur=${time}`;
+  }).join(", ");
+  return {
+    "server-timing": serverTimingValue
+  };
+};
+const letters = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t"];
+
 const jsenvContentTypeMap = {
   "application/javascript": {
     extensions: ["js", "cjs", "mjs", "ts", "jsx"]
   },
   "application/json": {
     extensions: ["json"]
+  },
+  "application/importmap+json": {
+    extensions: ["importmap"]
   },
   "application/octet-stream": {},
   "application/pdf": {
@@ -1745,10 +1705,33 @@ const serveFile = async (source, {
   cancellationToken = createCancellationToken(),
   method = "GET",
   headers = {},
+  contentTypeMap = jsenvContentTypeMap,
+  etagEnabled = false,
+  mtimeEnabled = false,
+  cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
   canReadDirectory = false,
-  cacheStrategy = "etag",
-  contentTypeMap = jsenvContentTypeMap
+  readableStreamLifetimeInSeconds = 5
 } = {}) => {
+  // here you might be tempted to add || cacheControl === 'no-cache'
+  // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
+  if (cacheControl === "no-store") {
+    if (etagEnabled) {
+      console.warn(`cannot enable etag when cache-control is ${cacheControl}`);
+      etagEnabled = false;
+    }
+
+    if (mtimeEnabled) {
+      console.warn(`cannot enable mtime when cache-control is ${cacheControl}`);
+      mtimeEnabled = false;
+    }
+  }
+
+  if (etagEnabled && mtimeEnabled) {
+    console.warn(`cannot enable both etag and mtime, mtime disabled in favor of etag.`);
+    mtimeEnabled = false;
+  }
+
   if (method !== "GET" && method !== "HEAD") {
     return {
       status: 501
@@ -1756,125 +1739,233 @@ const serveFile = async (source, {
   }
 
   const sourceUrl = assertAndNormalizeFileUrl(source);
-  const clientCacheDisabled = headers["cache-control"] === "no-cache";
 
   try {
-    const cacheWithMtime = !clientCacheDisabled && cacheStrategy === "mtime";
-    const cacheWithETag = !clientCacheDisabled && cacheStrategy === "etag";
-    const cachedDisabled = clientCacheDisabled || cacheStrategy === "none";
-    const sourceStat = await createOperation({
+    const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () => fs.statSync(urlToFileSystemPath(sourceUrl)));
+    const clientCacheResponse = await getClientCacheResponse({
       cancellationToken,
-      start: () => readFileSystemNodeStat(sourceUrl)
-    });
+      etagEnabled,
+      mtimeEnabled,
+      method,
+      headers,
+      sourceStat,
+      sourceUrl
+    }); // send 304 (redirect response to client cache)
+    // because the response body does not have to be transmitted
 
-    if (sourceStat.isDirectory()) {
-      if (canReadDirectory === false) {
-        return {
-          status: 403,
-          statusText: "not allowed to read directory",
-          headers: { ...(cachedDisabled ? {
-              "cache-control": "no-store"
-            } : {})
-          }
-        };
-      }
-
-      const directoryContentArray = await createOperation({
-        cancellationToken,
-        start: () => readDirectory(sourceUrl)
-      });
-      const directoryContentJson = JSON.stringify(directoryContentArray);
-      return {
-        status: 200,
-        headers: { ...(cachedDisabled ? {
-            "cache-control": "no-store"
-          } : {}),
-          "content-type": "application/json",
-          "content-length": directoryContentJson.length
-        },
-        body: directoryContentJson
-      };
-    } // not a file, give up
-
-
-    if (!sourceStat.isFile()) {
-      return {
-        status: 404,
-        headers: { ...(cachedDisabled ? {
-            "cache-control": "no-store"
+    if (clientCacheResponse.status === 304) {
+      return composeResponse({
+        timing: readStatTiming,
+        headers: { ...(cacheControl ? {
+            "cache-control": cacheControl
           } : {})
         }
-      };
+      }, clientCacheResponse);
     }
 
-    if (cacheWithETag) {
-      const fileContentAsBuffer = await createOperation({
-        cancellationToken,
-        start: () => readFile(urlToFileSystemPath(sourceUrl))
+    const rawResponse = await getRawResponse({
+      cancellationToken,
+      canReadDirectory,
+      contentTypeMap,
+      method,
+      headers,
+      sourceStat,
+      sourceUrl
+    }); // do not keep readable stream opened on that file
+    // otherwise file is kept open forever.
+    // moreover it will prevent to unlink the file on windows.
+
+    if (clientCacheResponse.body) {
+      rawResponse.body.destroy();
+    } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
+      // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
+      const timeout = setTimeout(() => {
+        console.warn(`readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`);
+        rawResponse.body.destroy();
+      }, readableStreamLifetimeInSeconds * 1000);
+      onceReadableStreamUsedOrClosed(rawResponse.body, () => {
+        clearTimeout(timeout);
       });
-      const fileContentEtag = bufferToEtag(fileContentAsBuffer);
-
-      if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
-        return {
-          status: 304,
-          headers: { ...(cachedDisabled ? {
-              "cache-control": "no-store"
-            } : {})
-          }
-        };
-      }
-
-      return {
-        status: 200,
-        headers: { ...(cachedDisabled ? {
-            "cache-control": "no-store"
-          } : {}),
-          "content-length": sourceStat.size,
-          "content-type": urlToContentType(sourceUrl, contentTypeMap),
-          "etag": fileContentEtag
-        },
-        body: fileContentAsBuffer
-      };
     }
 
-    if (cacheWithMtime && "if-modified-since" in headers) {
-      let cachedModificationDate;
+    return composeResponse({
+      timing: readStatTiming,
+      headers: { ...(cacheControl ? {
+          "cache-control": cacheControl
+        } : {}) // even if client cache is disabled, server can still
+        // send his own cache control but client should just ignore it
+        // and keep sending cache-control: 'no-store'
+        // if not, uncomment the line below to preserve client
+        // desired to ignore cache
+        // ...(headers["cache-control"] === "no-store" ? { "cache-control": "no-store" } : {}),
 
-      try {
-        cachedModificationDate = new Date(headers["if-modified-since"]);
-      } catch (e) {
-        return {
-          status: 400,
-          statusText: "if-modified-since header is not a valid date"
-        };
       }
-
-      const actualModificationDate = dateToSecondsPrecision(sourceStat.mtime);
-
-      if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
-        return {
-          status: 304
-        };
-      }
-    }
-
-    return {
-      status: 200,
-      headers: { ...(cachedDisabled ? {
-          "cache-control": "no-store"
-        } : {}),
-        ...(cacheWithMtime ? {
-          "last-modified": dateToUTCString(sourceStat.mtime)
-        } : {}),
-        "content-length": sourceStat.size,
-        "content-type": urlToContentType(sourceUrl, contentTypeMap)
-      },
-      body: fs.createReadStream(urlToFileSystemPath(sourceUrl))
-    };
+    }, rawResponse, clientCacheResponse);
   } catch (e) {
     return convertFileSystemErrorToResponseProperties(e);
   }
+};
+
+const getClientCacheResponse = async ({
+  headers,
+  etagEnabled,
+  mtimeEnabled,
+  ...rest
+}) => {
+  // here you might be tempted to add || headers["cache-control"] === "no-cache"
+  // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
+  if (headers["cache-control"] === "no-store") {
+    return {
+      status: 200
+    };
+  }
+
+  if (etagEnabled) {
+    return getEtagResponse({
+      headers,
+      ...rest
+    });
+  }
+
+  if (mtimeEnabled) {
+    return getMtimeResponse({
+      headers,
+      ...rest
+    });
+  }
+
+  return {
+    status: 200
+  };
+};
+
+const getEtagResponse = async ({
+  cancellationToken,
+  sourceUrl,
+  headers
+}) => {
+  const [readFileTiming, fileContentAsBuffer] = await timeFunction("file service>read file", () => createOperation({
+    cancellationToken,
+    start: () => readFile(urlToFileSystemPath(sourceUrl))
+  }));
+  const [computeEtagTiming, fileContentEtag] = await timeFunction("file service>generate file etag", () => bufferToEtag(fileContentAsBuffer));
+
+  if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
+    return {
+      status: 304,
+      timing: { ...readFileTiming,
+        ...computeEtagTiming
+      }
+    };
+  }
+
+  return {
+    status: 200,
+    headers: {
+      etag: fileContentEtag
+    },
+    body: fileContentAsBuffer,
+    timing: { ...readFileTiming,
+      ...computeEtagTiming
+    }
+  };
+};
+
+const getMtimeResponse = async ({
+  sourceStat,
+  headers
+}) => {
+  if ("if-modified-since" in headers) {
+    let cachedModificationDate;
+
+    try {
+      cachedModificationDate = new Date(headers["if-modified-since"]);
+    } catch (e) {
+      return {
+        status: 400,
+        statusText: "if-modified-since header is not a valid date"
+      };
+    }
+
+    const actualModificationDate = dateToSecondsPrecision(sourceStat.mtime);
+
+    if (Number(cachedModificationDate) >= Number(actualModificationDate)) {
+      return {
+        status: 304
+      };
+    }
+  }
+
+  return {
+    status: 200,
+    headers: {
+      "last-modified": dateToUTCString(sourceStat.mtime)
+    }
+  };
+};
+
+const getRawResponse = async ({
+  cancellationToken,
+  sourceStat,
+  sourceUrl,
+  canReadDirectory,
+  contentTypeMap
+}) => {
+  if (sourceStat.isDirectory()) {
+    if (canReadDirectory === false) {
+      return {
+        status: 403,
+        statusText: "not allowed to read directory"
+      };
+    }
+
+    const [readDirectoryTiming, directoryContentArray] = await timeFunction("file service>read directory", () => createOperation({
+      cancellationToken,
+      start: () => readDirectory(sourceUrl)
+    }));
+    const directoryContentJson = JSON.stringify(directoryContentArray);
+    return {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "content-length": directoryContentJson.length
+      },
+      body: directoryContentJson,
+      timing: readDirectoryTiming
+    };
+  } // not a file, give up
+
+
+  if (!sourceStat.isFile()) {
+    return {
+      status: 404
+    };
+  }
+
+  return {
+    status: 200,
+    headers: {
+      "content-type": urlToContentType(sourceUrl, contentTypeMap),
+      "content-length": sourceStat.size
+    },
+    body: fs.createReadStream(urlToFileSystemPath(sourceUrl), {
+      emitClose: true
+    })
+  };
+};
+
+const onceReadableStreamUsedOrClosed = (readableStream, callback) => {
+  const dataOrCloseCallback = () => {
+    readableStream.removeListener("data", dataOrCloseCallback);
+    readableStream.removeListener("close", dataOrCloseCallback);
+    callback();
+  };
+
+  readableStream.on("data", dataOrCloseCallback);
+  readableStream.on("close", dataOrCloseCallback);
 }; // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toUTCString
+
 
 const dateToUTCString = date => date.toUTCString();
 
@@ -1896,6 +1987,7 @@ const {
 const fetchUrl = async (url, {
   cancellationToken = createCancellationToken(),
   simplified = false,
+  ignoreHttpsError = false,
   canReadDirectory,
   contentTypeMap,
   cacheStrategy,
@@ -1927,8 +2019,11 @@ const fetchUrl = async (url, {
       headers
     });
     return simplified ? standardResponseToSimplifiedResponse(response) : response;
-  } // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
+  } // cancellation might be requested early, abortController does not support that
+  // so we have to throw if requested right away
 
+
+  cancellationToken.throwIfRequested(); // https://github.com/bitinn/node-fetch#request-cancellation-with-abortsignal
 
   const abortController = new AbortController();
   let cancelError;
@@ -1941,11 +2036,28 @@ const fetchUrl = async (url, {
   try {
     response = await nodeFetch(url, {
       signal: abortController.signal,
+      ...(ignoreHttpsError && url.startsWith("https") ? {
+        agent: new https.Agent({
+          rejectUnauthorized: false
+        })
+      } : {}),
       ...options
     });
   } catch (e) {
-    if (cancelError && e.name === "AbortError") {
-      throw cancelError;
+    if (e.message.includes("reason: connect ECONNRESET")) {
+      if (cancelError) {
+        throw cancelError;
+      }
+
+      throw e;
+    }
+
+    if (e.name === "AbortError") {
+      if (cancelError) {
+        throw cancelError;
+      }
+
+      throw e;
     }
 
     throw e;
@@ -2042,13 +2154,10 @@ const portIsFree = async ({
     port,
     ip
   });
-  return listenOperation.then(() => {
-    const stopPromise = listenOperation.stop(); // cancellation must wait for server to be closed before considering
-    // cancellation as done
 
-    cancellationToken.register(() => stopPromise);
-    return stopPromise.then(() => true);
-  }, error => {
+  try {
+    await listenOperation;
+  } catch (error) {
     if (error && error.code === "EADDRINUSE") {
       return false;
     }
@@ -2058,15 +2167,60 @@ const portIsFree = async ({
     }
 
     return Promise.reject(error);
-  });
+  }
+
+  const stopPromise = listenOperation.stop(); // cancellation must wait for server to be closed before considering
+  // cancellation as done
+
+  cancellationToken.register(() => stopPromise);
+  await stopPromise;
+  return true;
 };
 
 const firstService = (...callbacks) => {
-  return firstOperationMatching({
-    array: callbacks,
-    start: callback => callback(),
-    predicate: serviceGeneratedResponsePredicate
-  });
+  return request => {
+    return firstOperationMatching({
+      array: callbacks,
+      start: callback => callback(request),
+      predicate: serviceGeneratedResponsePredicate
+    });
+  };
+};
+const firstServiceWithTiming = namedServices => {
+  return async request => {
+    const servicesTiming = {};
+    const response = await firstOperationMatching({
+      array: Object.keys(namedServices).map(serviceName => {
+        return {
+          serviceName,
+          serviceFn: namedServices[serviceName]
+        };
+      }),
+      start: async ({
+        serviceName,
+        serviceFn
+      }) => {
+        const [serviceTiming, value] = await timeFunction(serviceName, () => serviceFn(request));
+        Object.assign(servicesTiming, serviceTiming);
+        return value;
+      },
+      predicate: value => {
+        if (value === null) {
+          return false;
+        }
+
+        return typeof value === "object";
+      }
+    });
+
+    if (response) {
+      return composeResponse({
+        timing: servicesTiming
+      }, response);
+    }
+
+    return null;
+  };
 };
 
 const serviceGeneratedResponsePredicate = value => {
@@ -2082,48 +2236,85 @@ const jsenvAccessControlAllowedHeaders = ["x-requested-with"];
 const jsenvAccessControlAllowedMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"];
 
 const jsenvPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQCll1gJkJqB+KRZsyepQ7gs81UO+73aKPaNbjp/dwo9XfqvNdDp
-Ki4zfTwzzJyFXkoN+NGihfQHI+VqRGITc+XzmBPcGu9XIvYy52lV3zjG4sldz+r8
-iNBzFwFSdUGmaHfkcm0YhvcjdRhyKalDaLMc3pVX4dq9rRzqm+pkbzVfVQIDAQAB
-AoGAImSo2HO8Y7ptCGR5nGKAYnW3+QC4khNoAkAezlK/Qbe/VZzr40Hrjq44Ttn0
-uI64+uXvRL5lzQXbpJLHfBraa8J6Vstf2Kwadmg+FyrqBcet6gidqZ6S1LBTfXII
-eSUcMIqkourv7LWOs8BfWQQiCf0Em0shGK1qf1lgiOQxoJECQQD+dSJOPqKbdZfJ
-/JcsInf5dPkfTNZMhBxpxqiYOvU3684W3LHB1g6BXjHmIF/CIrxcAHsxxXwTGWu9
-23Ffu+xPAkEApphOt+CzGdYq+Ygjj6Hq+hx3hkUwKUHSEOcNXG0Eb90m2sCEkXgz
-xH7fKYXaohFtis7IFJR4UfYD8pkGYVmdGwJAJf/iFqM9709ZUp25CatAFW3Fgkoc
-OqMEBzvWk51CX46EYV+l4BeSZPlnJEGzay96x5Z+z0j5pXSHZXvu62gJ+wJACci+
-LsxymFzcr0UQmZnv2/qaBne/yVyFQtrfDQOWFB/P7V8LKiP+Hlc5Mg4bdhNB9LoK
-RDMoEeA6ASB9oHAL6wJBAJcYLOICBVQrTil6DroEkrIxQY/S+arKc42uFpj98S+w
-k3doJf8KKDrclaRnKfMXxGYhXPUWFpa5fFr1hvcprEo=
+MIIEpAIBAAKCAQEA7g8u1+cEfCDTX2aMPkCjehz29cJpSqL8DZD7SPvznmXMXY8U
+/TcIcqN3NtPlAyNIjE/5NiQkPJKtgx06E5J1eGFQn8yt54E+2eQNNjz0elxkHmmN
+HwqbD76r6JuIoh/vfNhyw+2jaOO8R+sAJGywu2jFaDtxhho+1xaK1m92zdhu5U3K
+QMg97xuYx+/ezb4JllFBtcs3/uE2Hg50pWO6eny1EtEDfnMhE5L42DyMtoHU+Exd
+F3bGo9FxCq04UFU+ZRCuLUIY/AI8PsMcgcwq7n+O0ijylFoatmyudx+VMoHENWAL
+lBdfjALE3K3XPX6s2IzAVAa4CDpmC2aQ3UCElQIDAQABAoIBAQDh4TYpVeJDhUIK
+e1sGln6HF4Scm+McFpnipXZJQgdefGj1PRZFTTqOy9wKAfSCjbAAssFcRd68OtC4
+X7sDZyxfFLdTaPp5d4ETbfe7RwsSLygwUya8FWwb/GdRRoLWkkbCxv3eOlWa6Lt1
+4d04sojeygLFa+HDxJNrss/5t7mahbX02xTxM5O6Ly+gQDheIepjDNFmXPCvoVHq
+Dk3tNeEPsP6qECBWfbfz6eGGBvWsp/copc7ndL+svDmXyJsbZxaOJg0nJ6k4sMOW
+lTueGsr9t/H2wghhquNDK/Vy4e2YQhZ6VG6L0Yy2UtUfIO3JQbSYHIZpSMj1Mdkh
+t675JTfhAoGBAPjTzrkCkIj9g3GITNk556ZQ9W3O8NzbmBtyxdcAQTFhL69K81wy
+MrMvZ2YHPs+WwO6KrGLabDb2qf5xohp8Rgl09f3TjF+1L+ouVjYtKqIaiatA0q3R
+9jpSicyGPSmoo+i2VcHgar3IFcVxGdJoZR+LWR0o7Q1u/WN8HqkkWyp/AoGBAPTr
+6e61xIwlpt4adFFutfpjEaQRWGZ7PtJ+4xQpcztzAYseuBkofierDeCKzkPPsw1J
+1muLYJ9puJjRe/AykoqlF+iloxTM21wlEmtnvVOi+YvFBxj5YJiAiuEGB+42tVH5
++QbPkcm/lI3reJBuzqrvZkv3fsQhk18Gb0JSWn7rAoGAMS3jyMtJ99lrVlAjKDf6
+ofOUXoytLGm2iY5IrfLd772OqC2/JbTCMoom/JJoBq18GmmMIsma484i0Shyapuv
+WAUm7XEXaH8uJjHcVj7dE0b9eLyKJ1K9QM+5bpQFmKs9IiyPjI8nabUXIHv3J4/8
+lJx9E3dYSvRp3nTUtod6AU8CgYEAlz/5P0lRD5tQ6Wg83O0ZxH7ZrhBoHyGNMkDZ
+yuGuH9Bt65QU7LRs8+JWt4wAxS/GyzYGDHQOP2Pyc60qdLNGfAhoM2vWwkmgTc83
+CM0Pxk6m/QG32FxoosT+/ufSjfGLGAzfFK2qwoRlIR+BXPCRAE7HRbKZvlVdxRkc
+LEDfUfECgYANyg47HujS+lZb+3zm2/D/nP25BuGxADL07i4yHIxGSqEYS6MJAOq8
+0fJCOcOeK4XypFGvrVyZiVkWd3qTE1BuIFFRpqER7HYvThPBkJ/gOwjuqZQv5syL
+3+3M4qUvCSqYxAr3Bj2xpPO6ysXdPdJMqU/b/gWuS/VblvXHrMExdA==
 -----END RSA PRIVATE KEY-----`;
 const jsenvPublicKey = `-----BEGIN PUBLIC KEY-----
-MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCll1gJkJqB+KRZsyepQ7gs81UO
-+73aKPaNbjp/dwo9XfqvNdDpKi4zfTwzzJyFXkoN+NGihfQHI+VqRGITc+XzmBPc
-Gu9XIvYy52lV3zjG4sldz+r8iNBzFwFSdUGmaHfkcm0YhvcjdRhyKalDaLMc3pVX
-4dq9rRzqm+pkbzVfVQIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7g8u1+cEfCDTX2aMPkCj
+ehz29cJpSqL8DZD7SPvznmXMXY8U/TcIcqN3NtPlAyNIjE/5NiQkPJKtgx06E5J1
+eGFQn8yt54E+2eQNNjz0elxkHmmNHwqbD76r6JuIoh/vfNhyw+2jaOO8R+sAJGyw
+u2jFaDtxhho+1xaK1m92zdhu5U3KQMg97xuYx+/ezb4JllFBtcs3/uE2Hg50pWO6
+eny1EtEDfnMhE5L42DyMtoHU+ExdF3bGo9FxCq04UFU+ZRCuLUIY/AI8PsMcgcwq
+7n+O0ijylFoatmyudx+VMoHENWALlBdfjALE3K3XPX6s2IzAVAa4CDpmC2aQ3UCE
+lQIDAQAB
 -----END PUBLIC KEY-----`;
 const jsenvCertificate = `-----BEGIN CERTIFICATE-----
-MIIDEDCCAnmgAwIBAgIQd9Gto4GPGwXcLk0flq7bsjANBgkqhkiG9w0BAQsFADCB
-kTEuMCwGA1UEAxMlaHR0cHM6Ly9naXRodWIuY29tL2pzZW52L2pzZW52LXNlcnZl
-cjELMAkGA1UEBhMCRlIxGDAWBgNVBAgTD0FscGVzIE1hcml0aW1lczERMA8GA1UE
-BxMIVmFsYm9ubmUxDjAMBgNVBAoTBWpzZW52MRUwEwYDVQQLEwxqc2VudiBzZXJ2
-ZXIwHhcNMTkwNzA5MTQ1MzU4WhcNMjgwNzA5MTQ1MzU5WjCBkTEuMCwGA1UEAxMl
-aHR0cHM6Ly9naXRodWIuY29tL2pzZW52L2pzZW52LXNlcnZlcjELMAkGA1UEBhMC
-RlIxGDAWBgNVBAgTD0FscGVzIE1hcml0aW1lczERMA8GA1UEBxMIVmFsYm9ubmUx
-DjAMBgNVBAoTBWpzZW52MRUwEwYDVQQLEwxqc2VudiBzZXJ2ZXIwgZ8wDQYJKoZI
-hvcNAQEBBQADgY0AMIGJAoGBAKWXWAmQmoH4pFmzJ6lDuCzzVQ77vdoo9o1uOn93
-Cj1d+q810OkqLjN9PDPMnIVeSg340aKF9Acj5WpEYhNz5fOYE9wa71ci9jLnaVXf
-OMbiyV3P6vyI0HMXAVJ1QaZod+RybRiG9yN1GHIpqUNosxzelVfh2r2tHOqb6mRv
-NV9VAgMBAAGjZzBlMAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1Ud
-JQQMMAoGCCsGAQUFBwMBMB8GA1UdIwQYMBaAFOQhJA9S7idbpNIbvKMyeRWbwyad
-MA8GA1UdEQQIMAaHBH8AAAEwDQYJKoZIhvcNAQELBQADgYEAUKPupneUl1bdjbbf
-QvUqAExIK0Nv2u54X8l0EJvkdPMNQEer7Npzg5RQWExtvamfEZI1EPOeVfPVu5sz
-q4DB6OgAEzkytbKtcgPlhY0GDbim8ELCpO1JNDn/jUXH74VJElwXMZqan5VaQ5c+
-qsCeVUdw8QsfIZH6XbkvhCswh4k=
+MIIECjCCAvKgAwIBAgIBATANBgkqhkiG9w0BAQsFADCBkTEuMCwGA1UEAxMlaHR0
+cHM6Ly9naXRodWIuY29tL2pzZW52L2pzZW52LXNlcnZlcjELMAkGA1UEBhMCRlIx
+GDAWBgNVBAgTD0FscGVzIE1hcml0aW1lczERMA8GA1UEBxMIVmFsYm9ubmUxDjAM
+BgNVBAoTBWpzZW52MRUwEwYDVQQLEwxqc2VudiBzZXJ2ZXIwHhcNMjAwNTAzMTg0
+NzU0WhcNMjkwNTAzMTg0NzU1WjCBkTEuMCwGA1UEAxMlaHR0cHM6Ly9naXRodWIu
+Y29tL2pzZW52L2pzZW52LXNlcnZlcjELMAkGA1UEBhMCRlIxGDAWBgNVBAgTD0Fs
+cGVzIE1hcml0aW1lczERMA8GA1UEBxMIVmFsYm9ubmUxDjAMBgNVBAoTBWpzZW52
+MRUwEwYDVQQLEwxqc2VudiBzZXJ2ZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAw
+ggEKAoIBAQDuDy7X5wR8INNfZow+QKN6HPb1wmlKovwNkPtI+/OeZcxdjxT9Nwhy
+o3c20+UDI0iMT/k2JCQ8kq2DHToTknV4YVCfzK3ngT7Z5A02PPR6XGQeaY0fCpsP
+vqvom4iiH+982HLD7aNo47xH6wAkbLC7aMVoO3GGGj7XForWb3bN2G7lTcpAyD3v
+G5jH797NvgmWUUG1yzf+4TYeDnSlY7p6fLUS0QN+cyETkvjYPIy2gdT4TF0Xdsaj
+0XEKrThQVT5lEK4tQhj8Ajw+wxyBzCruf47SKPKUWhq2bK53H5UygcQ1YAuUF1+M
+AsTcrdc9fqzYjMBUBrgIOmYLZpDdQISVAgMBAAGjazBpMB8GA1UdIwQYMBaAFFJJ
+BlTW2Lp6maSe/c6HfH+zee1xMA4GA1UdDwEB/wQEAwIFoDATBgNVHSUEDDAKBggr
+BgEFBQcDATAhBgNVHREEGjAYhwR/AAABgglsb2NhbGhvc3SCBWpzZW52MA0GCSqG
+SIb3DQEBCwUAA4IBAQCJdOdqU0XBoto/ddAbTRC+qzmIl43w6zsUBO/5zEGDIs6x
+MwOOqMzuKtZ4Qm2hYTFfITRrinU2L3XmGdRdGzHF8V6VpOR1D+BZy0IvJBBW7DTE
+zuaBqQ5qtY1x1qtZdWaWZwexQjGlBdXa+yCWCOHs8amlH8WS6jOfvrD/ECpVbvJQ
+Xi+4yFFBeJ4P09Wx4YetDSJWFBL1Y5Q3TnqpyxNYZ3A3r/UolbG/HY0NnOGUA6wg
+MHOw0+Zg5Ls7pHo2bN7n1LseYeIt6M90q8/vRS6VjzWImJswxsdqSCP8TZxVb5S5
+p2OCbNpxQVtgLpUgLd9ePT2eX2kRTI8knM+C+e7L
 -----END CERTIFICATE-----`;
 
 const urlToSearchParamValue = (url, searchParamName) => {
   return new URL(url).searchParams.get(searchParamName);
+};
+
+const readRequestBodyAsString = body => {
+  return new Promise((resolve, reject) => {
+    const bufferArray = [];
+    body.subscribe({
+      error: reject,
+      next: buffer => {
+        bufferArray.push(buffer);
+      },
+      complete: () => {
+        const bodyAsBuffer = Buffer.concat(bufferArray);
+        const bodyAsString = bodyAsBuffer.toString();
+        resolve(bodyAsString);
+      }
+    });
+  });
 };
 
 const createTracker = () => {
@@ -2161,13 +2352,13 @@ const createServer = async ({
     if (http2) {
       const {
         createServer
-      } = await new Promise(function (resolve) { resolve(_interopNamespace(require('http2'))); });
+      } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('http2')); });
       return createServer();
     }
 
     const {
       createServer
-    } = await new Promise(function (resolve) { resolve(_interopNamespace(require('http'))); });
+    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('http')); });
     return createServer();
   }
 
@@ -2175,7 +2366,7 @@ const createServer = async ({
     if (http2) {
       const {
         createSecureServer
-      } = await new Promise(function (resolve) { resolve(_interopNamespace(require('http2'))); });
+      } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('http2')); });
       return createSecureServer({
         key: privateKey,
         cert: certificate,
@@ -2185,7 +2376,7 @@ const createServer = async ({
 
     const {
       createServer
-    } = await new Promise(function (resolve) { resolve(_interopNamespace(require('https'))); });
+    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('https')); });
     return createServer({
       key: privateKey,
       cert: certificate
@@ -2196,6 +2387,22 @@ const createServer = async ({
 };
 
 const trackServerPendingConnections = (nodeServer, {
+  http2,
+  onConnectionError
+}) => {
+  if (http2) {
+    // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
+    return trackHttp1ServerPendingConnections(nodeServer, {
+      onConnectionError
+    });
+  }
+
+  return trackHttp1ServerPendingConnections(nodeServer, {
+    onConnectionError
+  });
+}; // const trackHttp2ServerPendingSessions = () => {}
+
+const trackHttp1ServerPendingConnections = (nodeServer, {
   onConnectionError
 }) => {
   const pendingConnections = new Set();
@@ -2204,7 +2411,13 @@ const trackServerPendingConnections = (nodeServer, {
     connection.on("close", () => {
       pendingConnections.delete(connection);
     });
-    connection.on("error", onConnectionError);
+
+    if (onConnectionError) {
+      connection.on("error", error => {
+        onConnectionError(error, connection);
+      });
+    }
+
     pendingConnections.add(connection);
   };
 
@@ -2234,7 +2447,18 @@ const trackServerPendingConnections = (nodeServer, {
   };
 };
 
-const trackServerPendingRequests = nodeServer => {
+const trackServerPendingRequests = (nodeServer, {
+  http2
+}) => {
+  if (http2) {
+    // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
+    return trackHttp1ServerPendingRequests(nodeServer);
+  }
+
+  return trackHttp1ServerPendingRequests(nodeServer);
+}; // const trackHttp2ServerPendingStreams = () => {}
+
+const trackHttp1ServerPendingRequests = nodeServer => {
   const pendingClients = new Set();
 
   const requestListener = (nodeRequest, nodeResponse) => {
@@ -2260,19 +2484,34 @@ const trackServerPendingRequests = nodeServer => {
     }) => {
       if (nodeResponse.headersSent === false) {
         nodeResponse.writeHead(status, reason);
-      }
+      } // http2
 
-      return new Promise((resolve, reject) => {
-        if (nodeResponse.closed) {
+
+      if (nodeResponse.close) {
+        return new Promise((resolve, reject) => {
+          if (nodeResponse.closed) {
+            resolve();
+          } else {
+            nodeResponse.close(error => {
+              if (error) {
+                reject(error);
+              } else {
+                resolve();
+              }
+            });
+          }
+        });
+      } // http
+
+
+      return new Promise(resolve => {
+        if (nodeResponse.destroyed) {
           resolve();
         } else {
-          nodeResponse.close(error => {
-            if (error) {
-              reject(error);
-            } else {
-              resolve();
-            }
+          nodeResponse.once("close", () => {
+            resolve();
           });
+          nodeResponse.destroy();
         }
       });
     }));
@@ -2290,7 +2529,7 @@ const nodeStreamToObservable = nodeStream => {
       error,
       complete
     }) => {
-      // should we do nodeStream.resume() in case the stream was paused
+      // should we do nodeStream.resume() in case the stream was paused ?
       nodeStream.on("data", next);
       nodeStream.once("error", error);
       nodeStream.once("end", complete);
@@ -2361,13 +2600,23 @@ const nodeRequestToRequest = (nodeRequest, {
   } = nodeRequest;
   const headers = headersFromObject(nodeRequest.headers);
   const body = method === "POST" || method === "PUT" || method === "PATCH" ? nodeStreamToObservable(nodeRequest) : undefined;
+  let requestOrigin;
+
+  if (nodeRequest.authority) {
+    requestOrigin = nodeRequest.connection.encrypted ? `https://${nodeRequest.authority}` : `http://${nodeRequest.authority}`;
+  } else if (nodeRequest.headers.host) {
+    requestOrigin = nodeRequest.connection.encrypted ? `https://${nodeRequest.headers.host}` : `http://${nodeRequest.headers.host}`;
+  } else {
+    requestOrigin = serverOrigin;
+  }
+
   return Object.freeze({
     // the node request is considered as cancelled if client cancels or server cancels.
     // in case of server cancellation from a client perspective request is not cancelled
     // because client still wants a response. But from a server perspective the production
     // of a response for this request is cancelled
     cancellationToken: composeCancellationToken(serverCancellationToken, nodeRequestToCancellationToken(nodeRequest)),
-    origin: serverOrigin,
+    origin: requestOrigin,
     ressource,
     method,
     headers,
@@ -2382,6 +2631,9 @@ const nodeRequestToCancellationToken = nodeRequest => {
   } = createCancellationSource();
   nodeRequest.on("abort", () => {
     cancel("request aborted");
+  });
+  nodeRequest.on("close", () => {
+    cancel("request closed");
   });
   return token;
 };
@@ -2408,13 +2660,17 @@ const populateNodeResponse = (nodeResponse, {
   body,
   bodyEncoding
 }, {
+  cancellationToken,
   ignoreBody,
-  ignoreStatusTest
+  ignoreStatusText,
+  ignoreConnectionHeader
 } = {}) => {
-  const nodeHeaders = headersToNodeHeaders(headers); // nodejs strange signature for writeHead force this
+  const nodeHeaders = headersToNodeHeaders(headers, {
+    ignoreConnectionHeader
+  }); // nodejs strange signature for writeHead force this
   // https://nodejs.org/api/http.html#http_response_writehead_statuscode_statusmessage_headers
 
-  if (statusText === undefined || ignoreStatusTest) {
+  if (statusText === undefined || ignoreStatusText) {
     nodeResponse.writeHead(status, nodeHeaders);
   } else {
     nodeResponse.writeHead(status, statusText, nodeHeaders);
@@ -2432,7 +2688,23 @@ const populateNodeResponse = (nodeResponse, {
   const observable = bodyToObservable(body);
   const subscription = subscribe(observable, {
     next: data => {
-      nodeResponse.write(data);
+      try {
+        nodeResponse.write(data);
+      } catch (e) {
+        // Something inside Node.js sometimes puts stream
+        // in a state where .write() throw despites nodeResponse.destroyed
+        // being undefined and "close" event not being emitted.
+        // I have tested if we are the one calling destroy
+        // (I have commented every .destroy() call)
+        // but issue still occurs
+        // For the record it's "hard" to reproduce but can be by running
+        // a lot of tests against a browser in the context of @jsenv/core testing
+        if (e.code === "ERR_HTTP2_INVALID_STREAM") {
+          return;
+        }
+
+        throw e;
+      }
     },
     error: value => {
       nodeResponse.emit("error", value);
@@ -2440,6 +2712,10 @@ const populateNodeResponse = (nodeResponse, {
     complete: () => {
       nodeResponse.end();
     }
+  });
+  cancellationToken.register(() => {
+    subscription.unsubscribe();
+    nodeResponse.destroy();
   });
   nodeResponse.once("close", () => {
     // close body in case nodeResponse is prematurely closed
@@ -2454,9 +2730,12 @@ const mapping = {// "content-type": "Content-Type",
   // "last-modified": "Last-Modified",
 };
 
-const headersToNodeHeaders = headers => {
+const headersToNodeHeaders = (headers, {
+  ignoreConnectionHeader
+}) => {
   const nodeHeaders = {};
   Object.keys(headers).forEach(name => {
+    if (name === "connection" && ignoreConnectionHeader) return;
     const nodeHeaderName = name in mapping ? mapping[name] : name;
     nodeHeaders[nodeHeaderName] = headers[name];
   });
@@ -2515,16 +2794,65 @@ const statusIsClientError = status => status >= 400 && status < 500;
 
 const statusIsServerError = status => status >= 500 && status < 600;
 
-const originAsString = ({
+const getServerOrigins = ({
+  protocol,
+  ip,
+  port
+}) => {
+  return {
+    main: createServerOrigin({
+      protocol,
+      ip,
+      port
+    }),
+    external: createServerOrigin({
+      protocol,
+      ip: getExternalIp(),
+      port
+    })
+  };
+};
+
+const createServerOrigin = ({
   protocol,
   ip,
   port
 }) => {
   const url = new url$1.URL("https://127.0.0.1:80");
   url.protocol = protocol;
-  url.hostname = ip;
+  url.hostname = ipToHostname(ip);
   url.port = port;
   return url.origin;
+};
+
+const ipToHostname = (ip, {
+  preferLocalhost = true,
+  preferLocalIp = false,
+  preferExternalIp = false
+} = {}) => {
+  if (ip === "0.0.0.0" || !ip) {
+    if (preferLocalhost) return "localhost";
+    if (preferLocalIp) return "127.0.0.1";
+    if (preferExternalIp) return getExternalIp() || "0.0.0.0";
+    return "0.0.0.0";
+  }
+
+  return ip;
+};
+
+const getExternalIp = () => {
+  const networkInterfaceMap = os.networkInterfaces();
+  let internalIPV4NetworkAddress;
+  Object.keys(networkInterfaceMap).find(key => {
+    const networkAddressArray = networkInterfaceMap[key];
+    return networkAddressArray.find(networkAddress => {
+      if (networkAddress.internal) return false;
+      if (networkAddress.family !== "IPv4") return false;
+      internalIPV4NetworkAddress = networkAddress;
+      return true;
+    });
+  });
+  return internalIPV4NetworkAddress ? internalIPV4NetworkAddress.address : null;
 };
 
 const createReason = reasonString => {
@@ -2541,6 +2869,29 @@ const STOP_REASON_PROCESS_BEFORE_EXIT = createReason("process before exit");
 const STOP_REASON_PROCESS_EXIT = createReason("process exit");
 const STOP_REASON_NOT_SPECIFIED = createReason("not specified");
 
+const trackServerRequest = (nodeServer, fn, {
+  http2
+}) => {
+  if (http2) {
+    // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
+    return trackHttp1ServerRequest(nodeServer, fn);
+  }
+
+  return trackHttp1ServerRequest(nodeServer, fn);
+}; // const trackHttp2ServerRequest = (nodeServer, fn) => {
+//   nodeServer.on("stream", fn)
+//   return () => {
+//     nodeServer.removeListener("stream", fn)
+//   }
+// }
+
+const trackHttp1ServerRequest = (nodeServer, fn) => {
+  nodeServer.on("request", fn);
+  return () => {
+    nodeServer.removeListener("request", fn);
+  };
+};
+
 const require$2 = module$1.createRequire(url);
 
 const killPort = require$2("kill-port");
@@ -2550,11 +2901,14 @@ const startServer = async ({
   logLevel,
   serverName = "server",
   protocol = "http",
-  http2 = protocol === "https",
+  http2 = false,
   http1Allowed = true,
-  ip = "127.0.0.1",
+  redirectHttpToHttps = false,
+  ip = "0.0.0.0",
+  // will it work on windows ? https://github.com/nodejs/node/issues/14900
   port = 0,
   // assign a random available port
+  portHint,
   forcePort = false,
   privateKey = jsenvPrivateKey,
   certificate = jsenvCertificate,
@@ -2562,7 +2916,7 @@ const startServer = async ({
   // auto close the server when the process exits
   stopOnExit = true,
   // auto close when requestToResponse throw an error
-  stopOnInternalError = true,
+  stopOnInternalError = false,
   // auto close the server when an uncaughtException happens
   stopOnCrash = false,
   keepProcessAlive = true,
@@ -2577,6 +2931,8 @@ const startServer = async ({
   // by default OPTIONS request can be cache for a long time, it's not going to change soon ?
   // we could put a lot here, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Max-Age
   accessControlMaxAge = 600,
+  // https://www.w3.org/TR/server-timing/
+  sendServerTiming = false,
   sendInternalErrorStack = false,
   internalErrorToResponseProperties = error => {
     const body = error ? JSON.stringify({
@@ -2596,22 +2952,29 @@ const startServer = async ({
       body
     };
   },
+  requestWaitingMs = 20000,
+  requestWaitingCallback = (request, {
+    logger
+  }) => {
+    logger.warn(`still no response found for request after ${requestWaitingMs} ms
+--- request url ---
+${request.origin}${request.ressource}
+--- request headers ---
+${JSON.stringify(request.headers, null, "  ")}
+`);
+  },
   startedCallback = () => {},
   stoppedCallback = () => {},
-  errorIsCancellation = () => false
+  errorIsCancellation = () => false,
+  nagle = true
 } = {}) => {
-  return catchCancellation(async () => {
+  return executeAsyncFunction(async () => {
     if (port === 0 && forcePort) {
       throw new Error(`no need to pass forcePort when port is 0`);
     }
 
     if (protocol !== "http" && protocol !== "https") {
       throw new Error(`protocol must be http or https, got ${protocol}`);
-    } // https://github.com/nodejs/node/issues/14900
-
-
-    if (ip === "0.0.0.0" && process.platform === "win32") {
-      throw new Error(`listening ${ip} not available on window`);
     }
 
     if (protocol === "https") {
@@ -2632,6 +2995,10 @@ const startServer = async ({
       }
     }
 
+    if (http2 && protocol !== "https") {
+      throw new Error(`http2 needs "https" but protocol is "${protocol}"`);
+    }
+
     const internalCancellationSource = createCancellationSource();
     const externalCancellationToken = cancellationToken;
     const internalCancellationToken = internalCancellationSource.token;
@@ -2639,6 +3006,16 @@ const startServer = async ({
     const logger = createLogger({
       logLevel
     });
+
+    if (redirectHttpToHttps && protocol === "http") {
+      logger.warn(`redirectHttpToHttps ignored because protocol is http`);
+      redirectHttpToHttps = false;
+    }
+
+    if (redirectHttpToHttps && http2) {
+      logger.warn(`redirectHttpToHttps ignored because it does not work with http2. see https://github.com/nodejs/node/issues/23331`);
+      redirectHttpToHttps = false;
+    }
 
     const onError = error => {
       if (errorIsCancellation(error)) {
@@ -2723,27 +3100,44 @@ const startServer = async ({
     serverCancellationToken.register(stop);
     const startOperation = createStoppableOperation({
       cancellationToken: serverCancellationToken,
-      start: () => listen({
-        cancellationToken: serverCancellationToken,
-        server: nodeServer,
-        port,
-        ip
-      }),
+      start: async () => {
+        if (portHint) {
+          port = await findFreePort(portHint, {
+            cancellationToken: serverCancellationToken,
+            ip
+          });
+        }
+
+        return listen({
+          cancellationToken: serverCancellationToken,
+          server: nodeServer,
+          port,
+          ip
+        });
+      },
       stop: (_, reason) => stop(reason)
     });
     port = await startOperation;
     status = "opened";
-    const serverOrigin = originAsString({
+    const serverOrigins = getServerOrigins({
       protocol,
       ip,
       port
     });
+    const serverOrigin = serverOrigins.main;
     const connectionsTracker = trackServerPendingConnections(nodeServer, {
-      onConnectionError: onError
+      http2,
+      onConnectionError: (error, connection) => {
+        if (!connection.destroyed) {
+          onError(error);
+        }
+      }
     }); // opened connection must be shutdown before the close event is emitted
 
     registerCleanupCallback(connectionsTracker.stop);
-    const pendingRequestsTracker = trackServerPendingRequests(nodeServer); // ensure pending requests got a response from the server
+    const pendingRequestsTracker = trackServerPendingRequests(nodeServer, {
+      http2
+    }); // ensure pending requests got a response from the server
 
     registerCleanupCallback(reason => {
       pendingRequestsTracker.stop({
@@ -2753,6 +3147,17 @@ const startServer = async ({
     });
 
     const requestCallback = async (nodeRequest, nodeResponse) => {
+      if (!nagle) {
+        nodeRequest.connection.setNoDelay(true);
+      }
+
+      if (redirectHttpToHttps && !nodeRequest.connection.encrypted) {
+        nodeResponse.writeHead(301, {
+          location: `${serverOrigin}${nodeRequest.ressource}`
+        });
+        return;
+      }
+
       const request = nodeRequestToRequest(nodeRequest, {
         serverCancellationToken,
         serverOrigin
@@ -2764,36 +3169,35 @@ ${request.ressource}
 --- error stack ---
 ${error.stack}`);
       });
-      const response = await getResponse(request);
-      populateNodeResponse(nodeResponse, response, {
-        ignoreBody: request.method === "HEAD",
-        // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L97
-        ignoreStatusTest: Boolean(nodeRequest.stream)
-      });
-    };
-
-    nodeServer.on("request", requestCallback); // ensure we don't try to handle new requests while server is stopping
-
-    registerCleanupCallback(() => {
-      nodeServer.removeListener("request", requestCallback);
-    });
-    logger.info(`${serverName} started at ${serverOrigin}`);
-    startedCallback({
-      origin: serverOrigin
-    });
-    const corsEnabled = accessControlAllowRequestOrigin || accessControlAllowedOrigins.length; // here we check access control options to throw or warn if we find strange values
-
-    const getResponse = async request => {
-      const {
+      const [startRespondingTiming, {
         response,
         error
-      } = await generateResponseDescription(request);
+      }] = await timeFunction("time to start responding", () => generateResponseDescription(request));
+
+      if (sendServerTiming) {
+        const serverTiming = { ...response.timing,
+          ...startRespondingTiming
+        };
+        response.headers = composeResponseHeaders(timingToServerTimingResponseHeaders(serverTiming), response.headers);
+      }
+
+      logger.info(`${request.method} ${request.origin}${request.ressource}`);
+
+      if (error && isCancelError(error) && internalCancellationToken.cancellationRequested) {
+        logger.info("ignored because server closing");
+        nodeResponse.destroy();
+        return;
+      }
+
+      if (request.aborted) {
+        logger.info(`request aborted by client`);
+        nodeResponse.destroy();
+        return;
+      }
 
       if (request.method !== "HEAD" && response.headers["content-length"] > 0 && response.body === "") {
         logger.error(createContentLengthMismatchError(`content-length header is ${response.headers["content-length"]} but body is empty`));
       }
-
-      logger.info(`${request.method} ${request.origin}${request.ressource}`);
 
       if (error) {
         logger.error(`internal error while handling request.
@@ -2804,6 +3208,14 @@ ${request.method} ${request.origin}${request.ressource}`);
       }
 
       logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`);
+      populateNodeResponse(nodeResponse, response, {
+        cancellationToken: request.cancellationToken,
+        ignoreBody: request.method === "HEAD",
+        // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L97
+        ignoreStatusText: Boolean(nodeRequest.stream),
+        // https://github.com/nodejs/node/blob/79296dc2d02c0b9872bbfcbb89148ea036a546d0/lib/internal/http2/compat.js#L112
+        ignoreConnectionHeader: Boolean(nodeRequest.stream)
+      });
 
       if (stopOnInternalError && // stopOnInternalError stops server only if requestToResponse generated
       // a non controlled error (internal error).
@@ -2811,11 +3223,20 @@ ${request.method} ${request.origin}${request.ressource}`);
       // then we can assume we are still in control of what we are doing
       error) {
         // il faudrais pouvoir stop que les autres response ?
-        setTimeout(() => stop(STOP_REASON_INTERNAL_ERROR));
+        stop(STOP_REASON_INTERNAL_ERROR);
       }
-
-      return response;
     };
+
+    const removeRequestListener = trackServerRequest(nodeServer, requestCallback, {
+      http2
+    }); // ensure we don't try to handle new requests while server is stopping
+
+    registerCleanupCallback(removeRequestListener);
+    logger.info(`${serverName} started at ${serverOrigin} (${serverOrigins.external})`);
+    startedCallback({
+      origin: serverOrigin
+    });
+    const corsEnabled = accessControlAllowRequestOrigin || accessControlAllowedOrigins.length; // here we check access control options to throw or warn if we find strange values
 
     const generateResponseDescription = async request => {
       const responsePropertiesToResponse = ({
@@ -2823,7 +3244,8 @@ ${request.method} ${request.origin}${request.ressource}`);
         statusText = statusToStatusText(status),
         headers = {},
         body = "",
-        bodyEncoding
+        bodyEncoding,
+        timing
       }) => {
         if (corsEnabled) {
           const accessControlHeaders = generateAccessControlHeaders({
@@ -2835,14 +3257,16 @@ ${request.method} ${request.origin}${request.ressource}`);
             accessControlAllowedHeaders,
             accessControlAllowRequestHeaders,
             accessControlAllowCredentials,
-            accessControlMaxAge
+            accessControlMaxAge,
+            sendServerTiming
           });
           return {
             status,
             statusText,
             headers: composeResponseHeaders(headers, accessControlHeaders),
             body,
-            bodyEncoding
+            bodyEncoding,
+            timing
           };
         }
 
@@ -2851,9 +3275,12 @@ ${request.method} ${request.origin}${request.ressource}`);
           statusText,
           headers,
           body,
-          bodyEncoding
+          bodyEncoding,
+          timing
         };
       };
+
+      let timeout;
 
       try {
         if (corsEnabled && request.method === "OPTIONS") {
@@ -2867,11 +3294,17 @@ ${request.method} ${request.origin}${request.ressource}`);
           };
         }
 
+        timeout = setTimeout(() => requestWaitingCallback(request, {
+          logger,
+          requestWaitingMs
+        }), requestWaitingMs);
         const responseProperties = await requestToResponse(request);
+        clearTimeout(timeout);
         return {
           response: responsePropertiesToResponse(responseProperties || {})
         };
       } catch (error) {
+        clearTimeout(timeout);
         return {
           response: composeResponse(responsePropertiesToResponse({
             status: 500,
@@ -2920,7 +3353,8 @@ const generateAccessControlHeaders = ({
   accessControlAllowCredentials,
   // by default OPTIONS request can be cache for a long time, it's not going to change soon ?
   // we could put a lot here, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Max-Age
-  accessControlMaxAge = 600
+  accessControlMaxAge = 600,
+  sendServerTiming
 } = {}) => {
   const vary = [];
   const allowedOriginArray = [...accessControlAllowedOrigins];
@@ -2973,6 +3407,9 @@ const generateAccessControlHeaders = ({
       "access-control-allow-credentials": true
     } : {}),
     "access-control-max-age": accessControlMaxAge,
+    ...(sendServerTiming ? {
+      "timing-allow-origin": allowedOriginArray.join(", ")
+    } : {}),
     ...(vary.length ? {
       vary: vary.join(", ")
     } : {})
@@ -2999,13 +3436,18 @@ exports.createSSERoom = createSSERoom;
 exports.fetchUrl = fetchUrl;
 exports.findFreePort = findFreePort;
 exports.firstService = firstService;
+exports.firstServiceWithTiming = firstServiceWithTiming;
 exports.jsenvAccessControlAllowedHeaders = jsenvAccessControlAllowedHeaders;
 exports.jsenvAccessControlAllowedMethods = jsenvAccessControlAllowedMethods;
 exports.jsenvCertificate = jsenvCertificate;
 exports.jsenvPrivateKey = jsenvPrivateKey;
 exports.jsenvPublicKey = jsenvPublicKey;
+exports.readRequestBodyAsString = readRequestBodyAsString;
 exports.serveFile = serveFile;
 exports.startServer = startServer;
+exports.timeFunction = timeFunction;
+exports.timeStart = timeStart;
 exports.urlToContentType = urlToContentType;
 exports.urlToSearchParamValue = urlToSearchParamValue;
+
 //# sourceMappingURL=main.cjs.map

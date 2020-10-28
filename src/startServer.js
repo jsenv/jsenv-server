@@ -9,9 +9,10 @@ import {
   composeCancellationToken,
   createCancellationSource,
   isCancelError,
+  executeAsyncFunction
 } from "@jsenv/cancellation"
 import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
-import { catchCancellation, memoize } from "@jsenv/util"
+import { memoize } from "@jsenv/util"
 import { createLogger } from "@jsenv/logger"
 import { createTracker } from "./internal/createTracker.js"
 import { urlToOrigin } from "./internal/urlToOrigin.js"
@@ -118,7 +119,7 @@ ${JSON.stringify(request.headers, null, "  ")}
   errorIsCancellation = () => false,
   nagle = true,
 } = {}) => {
-  return catchCancellation(async () => {
+  return executeAsyncFunction(async () => {
     if (port === 0 && forcePort) {
       throw new Error(`no need to pass forcePort when port is 0`)
     }
