@@ -40,6 +40,7 @@
     "generate-commonjs-bundle": "node ./script/generate-commonjs-bundle/generate-commonjs-bundle.js",
     "generate-import-map": "node ./script/generate-import-map/generate-import-map.js",
     "dist": "npm run generate-commonjs-bundle",
+    "postinstall": "npm run generate-import-map",
     "prepublishOnly": "node ./script/transform-package/remove-postinstall.js && npm run dist",
     "postpublish": "node ./script/transform-package/restore-postinstall.js"
   },
