@@ -120,7 +120,7 @@ export const serveFile = async (
           // send his own cache control but client should just ignore it
           // and keep sending cache-control: 'no-store'
           // if not, uncomment the line below to preserve client
-          // desired to ignore cache
+          // desire to ignore cache
           // ...(headers["cache-control"] === "no-store" ? { "cache-control": "no-store" } : {}),
         },
       },
@@ -136,7 +136,12 @@ const getClientCacheResponse = async ({ headers, etagEnabled, mtimeEnabled, ...r
   // here you might be tempted to add || headers["cache-control"] === "no-cache"
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
-  if (headers["cache-control"] === "no-store") {
+
+  if (
+    headers["cache-control"] === "no-store" ||
+    // let's disable it on no-cache too (https://github.com/jsenv/jsenv-server/issues/17)
+    headers["cache-control"] === "no-cache"
+  ) {
     return { status: 200 }
   }
 
