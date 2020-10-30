@@ -8,7 +8,7 @@ const sourceUrl = resolveUrl("./file.js?ok=true", testDirectoryUrl)
 const actual = await serveFile(sourceUrl, {
   etagEnabled: true,
 })
-const sourceBuffer = Buffer.from(await readFile(sourceUrl))
+const sourceBuffer = await readFile(sourceUrl, { as: "buffer" })
 const expected = {
   status: 200,
   statusText: undefined,
@@ -18,11 +18,10 @@ const expected = {
     "content-length": sourceBuffer.length,
     "etag": bufferToEtag(sourceBuffer),
   },
-  body: sourceBuffer,
+  body: actual.body,
   bodyEncoding: undefined,
   timing: {
     "file service>read file stat": actual.timing["file service>read file stat"],
-    "file service>read file": actual.timing["file service>read file"],
     "file service>generate file etag": actual.timing["file service>generate file etag"],
   },
 }

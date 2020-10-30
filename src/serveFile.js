@@ -14,6 +14,9 @@ import { composeResponse } from "./composeResponse.js"
 
 const { readFile } = promises
 
+const ETAG_CACHE = new Map()
+const ETAG_CACHE_MAX_SIZE = 500
+
 export const serveFile = async (
   source,
   {
@@ -22,6 +25,7 @@ export const serveFile = async (
     headers = {},
     contentTypeMap = jsenvContentTypeMap,
     etagEnabled = false,
+    etagCacheDisabled = false,
     mtimeEnabled = false,
     cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
     canReadDirectory = false,
@@ -62,6 +66,7 @@ export const serveFile = async (
     const clientCacheResponse = await getClientCacheResponse({
       cancellationToken,
       etagEnabled,
+      etagCacheDisabled,
       mtimeEnabled,
       method,
       headers,
@@ -132,7 +137,13 @@ export const serveFile = async (
   }
 }
 
-const getClientCacheResponse = async ({ headers, etagEnabled, mtimeEnabled, ...rest }) => {
+const getClientCacheResponse = async ({
+  headers,
+  etagEnabled,
+  etagCacheDisabled,
+  mtimeEnabled,
+  ...rest
+}) => {
   // here you might be tempted to add || headers["cache-control"] === "no-cache"
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
@@ -147,6 +158,7 @@ const getClientCacheResponse = async ({ headers, etagEnabled, mtimeEnabled, ...r
 
   if (etagEnabled) {
     return getEtagResponse({
+      etagCacheDisabled,
       headers,
       ...rest,
     })
@@ -162,25 +174,23 @@ const getClientCacheResponse = async ({ headers, etagEnabled, mtimeEnabled, ...r
   return { status: 200 }
 }
 
-const getEtagResponse = async ({ cancellationToken, sourceUrl, headers }) => {
-  const [readFileTiming, fileContentAsBuffer] = await timeFunction("file service>read file", () =>
-    createOperation({
-      cancellationToken,
-      start: () => readFile(urlToFileSystemPath(sourceUrl)),
-    }),
-  )
+const getEtagResponse = async ({
+  etagCacheDisabled,
+  cancellationToken,
+  sourceUrl,
+  sourceStat,
+  headers,
+}) => {
   const [computeEtagTiming, fileContentEtag] = await timeFunction(
     "file service>generate file etag",
-    () => bufferToEtag(fileContentAsBuffer),
+    () => computeEtag({ cancellationToken, etagCacheDisabled, headers, sourceUrl, sourceStat }),
   )
 
-  if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
+  const requestHasIfNoneMatchHeader = "if-none-match" in headers
+  if (requestHasIfNoneMatchHeader && headers["if-none-match"] === fileContentEtag) {
     return {
       status: 304,
-      timing: {
-        ...readFileTiming,
-        ...computeEtagTiming,
-      },
+      timing: computeEtagTiming,
     }
   }
 
@@ -189,12 +199,34 @@ const getEtagResponse = async ({ cancellationToken, sourceUrl, headers }) => {
     headers: {
       etag: fileContentEtag,
     },
-    body: fileContentAsBuffer,
-    timing: {
-      ...readFileTiming,
-      ...computeEtagTiming,
-    },
+    timing: computeEtagTiming,
   }
+}
+
+const computeEtag = async ({ cancellationToken, etagCacheDisabled, sourceUrl, sourceStat }) => {
+  if (!etagCacheDisabled) {
+    const etagCacheEntry = ETAG_CACHE.get(sourceUrl)
+    if (etagCacheEntry && !fileStatAreDifferent(etagCacheEntry.sourceStat, sourceStat)) {
+      return etagCacheEntry.eTag
+    }
+  }
+  const fileContentAsBuffer = await createOperation({
+    cancellationToken,
+    start: () => readFile(urlToFileSystemPath(sourceUrl)),
+  })
+  const eTag = bufferToEtag(fileContentAsBuffer)
+  if (!etagCacheDisabled) {
+    if (ETAG_CACHE.size >= ETAG_CACHE_MAX_SIZE) {
+      const firstKey = Array.from(ETAG_CACHE.keys())[0]
+      ETAG_CACHE.delete(firstKey)
+    }
+    ETAG_CACHE.set(sourceUrl, { sourceStat, eTag })
+  }
+  return eTag
+}
+
+const fileStatAreDifferent = (leftFileStat, rightFileStat) => {
+  return JSON.stringify(leftFileStat) !== JSON.stringify(rightFileStat)
 }
 
 const getMtimeResponse = async ({ sourceStat, headers }) => {
