@@ -206,7 +206,7 @@ const getEtagResponse = async ({
 const computeEtag = async ({ cancellationToken, etagCacheDisabled, sourceUrl, sourceStat }) => {
   if (!etagCacheDisabled) {
     const etagCacheEntry = ETAG_CACHE.get(sourceUrl)
-    if (etagCacheEntry && !fileStatAreDifferent(etagCacheEntry.sourceStat, sourceStat)) {
+    if (etagCacheEntry && fileStatAreTheSame(etagCacheEntry.sourceStat, sourceStat)) {
       return etagCacheEntry.eTag
     }
   }
@@ -225,9 +225,25 @@ const computeEtag = async ({ cancellationToken, etagCacheDisabled, sourceUrl, so
   return eTag
 }
 
-const fileStatAreDifferent = (leftFileStat, rightFileStat) => {
-  return JSON.stringify(leftFileStat) !== JSON.stringify(rightFileStat)
+// https://nodejs.org/api/fs.html#fs_class_fs_stats
+const fileStatAreTheSame = (leftFileStat, rightFileStat) => {
+  return fileStatKeysToCompare.every((keyToCompare) => {
+    const leftValue = leftFileStat[keyToCompare]
+    const rightValue = rightFileStat[keyToCompare]
+    return leftValue === rightValue
+  })
 }
+const fileStatKeysToCompare = [
+  // mtime the the most likely to change, check it first
+  "mtimeMs",
+  "size",
+  "ctimeMs",
+  "ino",
+  "mode",
+  "uid",
+  "gid",
+  "blksize",
+]
 
 const getMtimeResponse = async ({ sourceStat, headers }) => {
   if ("if-modified-since" in headers) {
