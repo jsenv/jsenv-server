@@ -1701,12 +1701,15 @@ const urlToContentType = (url, contentTypeMap = jsenvContentTypeMap, contentType
 const {
   readFile
 } = fs.promises;
+const ETAG_CACHE = new Map();
+const ETAG_CACHE_MAX_SIZE = 500;
 const serveFile = async (source, {
   cancellationToken = createCancellationToken(),
   method = "GET",
   headers = {},
   contentTypeMap = jsenvContentTypeMap,
   etagEnabled = false,
+  etagCacheDisabled = false,
   mtimeEnabled = false,
   cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
   canReadDirectory = false,
@@ -1745,6 +1748,7 @@ const serveFile = async (source, {
     const clientCacheResponse = await getClientCacheResponse({
       cancellationToken,
       etagEnabled,
+      etagCacheDisabled,
       mtimeEnabled,
       method,
       headers,
@@ -1796,7 +1800,7 @@ const serveFile = async (source, {
         // send his own cache control but client should just ignore it
         // and keep sending cache-control: 'no-store'
         // if not, uncomment the line below to preserve client
-        // desired to ignore cache
+        // desire to ignore cache
         // ...(headers["cache-control"] === "no-store" ? { "cache-control": "no-store" } : {}),
 
       }
@@ -1809,13 +1813,15 @@ const serveFile = async (source, {
 const getClientCacheResponse = async ({
   headers,
   etagEnabled,
+  etagCacheDisabled,
   mtimeEnabled,
   ...rest
 }) => {
   // here you might be tempted to add || headers["cache-control"] === "no-cache"
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
-  if (headers["cache-control"] === "no-store") {
+  if (headers["cache-control"] === "no-store" || // let's disable it on no-cache too (https://github.com/jsenv/jsenv-server/issues/17)
+  headers["cache-control"] === "no-cache") {
     return {
       status: 200
     };
@@ -1823,6 +1829,7 @@ const getClientCacheResponse = async ({
 
   if (etagEnabled) {
     return getEtagResponse({
+      etagCacheDisabled,
       headers,
       ...rest
     });
@@ -1841,22 +1848,25 @@ const getClientCacheResponse = async ({
 };
 
 const getEtagResponse = async ({
+  etagCacheDisabled,
   cancellationToken,
   sourceUrl,
+  sourceStat,
   headers
 }) => {
-  const [readFileTiming, fileContentAsBuffer] = await timeFunction("file service>read file", () => createOperation({
+  const [computeEtagTiming, fileContentEtag] = await timeFunction("file service>generate file etag", () => computeEtag({
     cancellationToken,
-    start: () => readFile(urlToFileSystemPath(sourceUrl))
+    etagCacheDisabled,
+    headers,
+    sourceUrl,
+    sourceStat
   }));
-  const [computeEtagTiming, fileContentEtag] = await timeFunction("file service>generate file etag", () => bufferToEtag(fileContentAsBuffer));
+  const requestHasIfNoneMatchHeader = ("if-none-match" in headers);
 
-  if ("if-none-match" in headers && headers["if-none-match"] === fileContentEtag) {
+  if (requestHasIfNoneMatchHeader && headers["if-none-match"] === fileContentEtag) {
     return {
       status: 304,
-      timing: { ...readFileTiming,
-        ...computeEtagTiming
-      }
+      timing: computeEtagTiming
     };
   }
 
@@ -1865,12 +1875,56 @@ const getEtagResponse = async ({
     headers: {
       etag: fileContentEtag
     },
-    body: fileContentAsBuffer,
-    timing: { ...readFileTiming,
-      ...computeEtagTiming
-    }
+    timing: computeEtagTiming
   };
 };
+
+const computeEtag = async ({
+  cancellationToken,
+  etagCacheDisabled,
+  sourceUrl,
+  sourceStat
+}) => {
+  if (!etagCacheDisabled) {
+    const etagCacheEntry = ETAG_CACHE.get(sourceUrl);
+
+    if (etagCacheEntry && fileStatAreTheSame(etagCacheEntry.sourceStat, sourceStat)) {
+      return etagCacheEntry.eTag;
+    }
+  }
+
+  const fileContentAsBuffer = await createOperation({
+    cancellationToken,
+    start: () => readFile(urlToFileSystemPath(sourceUrl))
+  });
+  const eTag = bufferToEtag(fileContentAsBuffer);
+
+  if (!etagCacheDisabled) {
+    if (ETAG_CACHE.size >= ETAG_CACHE_MAX_SIZE) {
+      const firstKey = Array.from(ETAG_CACHE.keys())[0];
+      ETAG_CACHE.delete(firstKey);
+    }
+
+    ETAG_CACHE.set(sourceUrl, {
+      sourceStat,
+      eTag
+    });
+  }
+
+  return eTag;
+}; // https://nodejs.org/api/fs.html#fs_class_fs_stats
+
+
+const fileStatAreTheSame = (leftFileStat, rightFileStat) => {
+  return fileStatKeysToCompare.every(keyToCompare => {
+    const leftValue = leftFileStat[keyToCompare];
+    const rightValue = rightFileStat[keyToCompare];
+    return leftValue === rightValue;
+  });
+};
+
+const fileStatKeysToCompare = [// mtime the the most likely to change, check it first
+"mtimeMs", "size", "ctimeMs", "ino", "mode", "uid", "gid", "blksize"];
 
 const getMtimeResponse = async ({
   sourceStat,
