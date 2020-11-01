@@ -27,6 +27,23 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   assert({ actual, expected })
 }
 
+// fetching data url
+{
+  const jsData = `const a = true;`
+  const jsBase64 = Buffer.from(jsData).toString("base64")
+  const url = `data:text/javascript;base64,${jsBase64}`
+  const actual = await fetchUrl(url, { simplified: true })
+  const expected = {
+    url,
+    status: 200,
+    headers: {
+      "content-type": "text/javascript",
+    },
+    body: jsData,
+  }
+  assert({ actual, expected })
+}
+
 // fetch file but 404
 {
   await ensureEmptyDirectory(tempDirectoryUrl)
