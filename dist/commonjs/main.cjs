@@ -1745,6 +1745,42 @@ const serveFile = async (source, {
 
   try {
     const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () => fs.statSync(urlToFileSystemPath(sourceUrl)));
+
+    if (sourceStat.isDirectory()) {
+      if (canReadDirectory === false) {
+        return {
+          status: 403,
+          statusText: "not allowed to read directory",
+          timing: readStatTiming
+        };
+      }
+
+      const [readDirectoryTiming, directoryContentArray] = await timeFunction("file service>read directory", () => createOperation({
+        cancellationToken,
+        start: () => readDirectory(sourceUrl)
+      }));
+      const directoryContentJson = JSON.stringify(directoryContentArray);
+      return {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": directoryContentJson.length
+        },
+        body: directoryContentJson,
+        timing: { ...readStatTiming,
+          ...readDirectoryTiming
+        }
+      };
+    } // not a file, give up
+
+
+    if (!sourceStat.isFile()) {
+      return {
+        status: 404,
+        timing: readStatTiming
+      };
+    }
+
     const clientCacheResponse = await getClientCacheResponse({
       cancellationToken,
       etagEnabled,
@@ -1775,21 +1811,24 @@ const serveFile = async (source, {
       headers,
       sourceStat,
       sourceUrl
-    }); // do not keep readable stream opened on that file
-    // otherwise file is kept open forever.
-    // moreover it will prevent to unlink the file on windows.
+    });
 
-    if (clientCacheResponse.body) {
-      rawResponse.body.destroy();
-    } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
-      // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
-      const timeout = setTimeout(() => {
-        console.warn(`readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`);
+    if (rawResponse.body) {
+      // do not keep readable stream opened on that file
+      // otherwise file is kept open forever.
+      // moreover it will prevent to unlink the file on windows.
+      if (clientCacheResponse.body) {
         rawResponse.body.destroy();
-      }, readableStreamLifetimeInSeconds * 1000);
-      onceReadableStreamUsedOrClosed(rawResponse.body, () => {
-        clearTimeout(timeout);
-      });
+      } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
+        // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
+        const timeout = setTimeout(() => {
+          console.warn(`readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`);
+          rawResponse.body.destroy();
+        }, readableStreamLifetimeInSeconds * 1000);
+        onceReadableStreamUsedOrClosed(rawResponse.body, () => {
+          clearTimeout(timeout);
+        });
+      }
     }
 
     return composeResponse({
@@ -1960,43 +1999,10 @@ const getMtimeResponse = async ({
 };
 
 const getRawResponse = async ({
-  cancellationToken,
   sourceStat,
   sourceUrl,
-  canReadDirectory,
   contentTypeMap
 }) => {
-  if (sourceStat.isDirectory()) {
-    if (canReadDirectory === false) {
-      return {
-        status: 403,
-        statusText: "not allowed to read directory"
-      };
-    }
-
-    const [readDirectoryTiming, directoryContentArray] = await timeFunction("file service>read directory", () => createOperation({
-      cancellationToken,
-      start: () => readDirectory(sourceUrl)
-    }));
-    const directoryContentJson = JSON.stringify(directoryContentArray);
-    return {
-      status: 200,
-      headers: {
-        "content-type": "application/json",
-        "content-length": directoryContentJson.length
-      },
-      body: directoryContentJson,
-      timing: readDirectoryTiming
-    };
-  } // not a file, give up
-
-
-  if (!sourceStat.isFile()) {
-    return {
-      status: 404
-    };
-  }
-
   return {
     status: 200,
     headers: {
@@ -2073,6 +2079,23 @@ const fetchUrl = async (url, {
       headers
     });
     return simplified ? standardResponseToSimplifiedResponse(response) : response;
+  }
+
+  if (url.startsWith("data:")) {
+    const {
+      mediaType,
+      base64Flag,
+      data
+    } = parseDataUrl(url);
+    const body = base64Flag ? Buffer.from(data, "base64") : Buffer.from(data);
+    const response = new Response(body, {
+      url,
+      status: 200,
+      headers: {
+        "content-type": mediaType
+      }
+    });
+    return simplified ? standardResponseToSimplifiedResponse(response) : response;
   } // cancellation might be requested early, abortController does not support that
   // so we have to throw if requested right away
 
@@ -2137,6 +2160,29 @@ const responseToHeaders = response => {
     headers[name] = value;
   });
   return headers;
+};
+
+const parseDataUrl = dataUrl => {
+  const afterDataProtocol = dataUrl.slice("data:".length);
+  const commaIndex = afterDataProtocol.indexOf(",");
+  const beforeComma = afterDataProtocol.slice(0, commaIndex);
+  let mediaType;
+  let base64Flag;
+
+  if (beforeComma.endsWith(`;base64`)) {
+    mediaType = beforeComma.slice(0, -`;base64`.length);
+    base64Flag = true;
+  } else {
+    mediaType = beforeComma;
+    base64Flag = false;
+  }
+
+  const afterComma = afterDataProtocol.slice(commaIndex + 1);
+  return {
+    mediaType: mediaType === "" ? "text/plain;charset=US-ASCII" : mediaType,
+    base64Flag,
+    data: afterComma
+  };
 };
 
 const listen = ({
