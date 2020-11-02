@@ -63,6 +63,47 @@ export const serveFile = async (
       statSync(urlToFileSystemPath(sourceUrl)),
     )
 
+    if (sourceStat.isDirectory()) {
+      if (canReadDirectory === false) {
+        return {
+          status: 403,
+          statusText: "not allowed to read directory",
+          timing: readStatTiming,
+        }
+      }
+
+      const [readDirectoryTiming, directoryContentArray] = await timeFunction(
+        "file service>read directory",
+        () =>
+          createOperation({
+            cancellationToken,
+            start: () => readDirectory(sourceUrl),
+          }),
+      )
+      const directoryContentJson = JSON.stringify(directoryContentArray)
+
+      return {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": directoryContentJson.length,
+        },
+        body: directoryContentJson,
+        timing: {
+          ...readStatTiming,
+          ...readDirectoryTiming,
+        },
+      }
+    }
+
+    // not a file, give up
+    if (!sourceStat.isFile()) {
+      return {
+        status: 404,
+        timing: readStatTiming,
+      }
+    }
+
     const clientCacheResponse = await getClientCacheResponse({
       cancellationToken,
       etagEnabled,
@@ -98,22 +139,24 @@ export const serveFile = async (
       sourceUrl,
     })
 
-    // do not keep readable stream opened on that file
-    // otherwise file is kept open forever.
-    // moreover it will prevent to unlink the file on windows.
-    if (clientCacheResponse.body) {
-      rawResponse.body.destroy()
-    } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
-      // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
-      const timeout = setTimeout(() => {
-        console.warn(
-          `readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`,
-        )
+    if (rawResponse.body) {
+      // do not keep readable stream opened on that file
+      // otherwise file is kept open forever.
+      // moreover it will prevent to unlink the file on windows.
+      if (clientCacheResponse.body) {
         rawResponse.body.destroy()
-      }, readableStreamLifetimeInSeconds * 1000)
-      onceReadableStreamUsedOrClosed(rawResponse.body, () => {
-        clearTimeout(timeout)
-      })
+      } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
+        // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
+        const timeout = setTimeout(() => {
+          console.warn(
+            `readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`,
+          )
+          rawResponse.body.destroy()
+        }, readableStreamLifetimeInSeconds * 1000)
+        onceReadableStreamUsedOrClosed(rawResponse.body, () => {
+          clearTimeout(timeout)
+        })
+      }
     }
 
     return composeResponse(
@@ -273,49 +316,7 @@ const getMtimeResponse = async ({ sourceStat, headers }) => {
   }
 }
 
-const getRawResponse = async ({
-  cancellationToken,
-  sourceStat,
-  sourceUrl,
-  canReadDirectory,
-  contentTypeMap,
-}) => {
-  if (sourceStat.isDirectory()) {
-    if (canReadDirectory === false) {
-      return {
-        status: 403,
-        statusText: "not allowed to read directory",
-      }
-    }
-
-    const [readDirectoryTiming, directoryContentArray] = await timeFunction(
-      "file service>read directory",
-      () =>
-        createOperation({
-          cancellationToken,
-          start: () => readDirectory(sourceUrl),
-        }),
-    )
-    const directoryContentJson = JSON.stringify(directoryContentArray)
-
-    return {
-      status: 200,
-      headers: {
-        "content-type": "application/json",
-        "content-length": directoryContentJson.length,
-      },
-      body: directoryContentJson,
-      timing: readDirectoryTiming,
-    }
-  }
-
-  // not a file, give up
-  if (!sourceStat.isFile()) {
-    return {
-      status: 404,
-    }
-  }
-
+const getRawResponse = async ({ sourceStat, sourceUrl, contentTypeMap }) => {
   return {
     status: 200,
     headers: {
