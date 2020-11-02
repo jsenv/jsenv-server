@@ -36,6 +36,7 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   const expected = {
     url,
     status: 200,
+    statusText: "OK",
     headers: {
       "content-type": "text/javascript",
     },
