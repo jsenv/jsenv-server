@@ -4,9 +4,13 @@ export const valueToObservable = (value) => {
   return createObservable({
     subscribe: ({ next, complete }) => {
       next(value)
-      complete()
+      const timer = setTimeout(() => {
+        complete()
+      })
       return {
-        unsubscribe: () => {},
+        unsubscribe: () => {
+          clearTimeout(timer)
+        },
       }
     },
   })

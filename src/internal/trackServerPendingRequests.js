@@ -15,7 +15,7 @@ const trackHttp1ServerPendingRequests = (nodeServer) => {
     const client = { nodeRequest, nodeResponse }
 
     pendingClients.add(client)
-    nodeResponse.on("close", () => {
+    nodeResponse.once("close", () => {
       pendingClients.delete(client)
     })
   }

@@ -73,10 +73,12 @@ export const createSSERoom = ({
         }
 
         const unsubscribe = () => {
-          connections.delete(connection)
-          logger.debug(
-            `connection closed by us, number of client connected to event source: ${connections.size}`,
-          )
+          if (connections.has(connection)) {
+            connections.delete(connection)
+            logger.debug(
+              `connection closed by us, number of client connected to event source: ${connections.size}`,
+            )
+          }
         }
 
         connection.unsubscribe = unsubscribe

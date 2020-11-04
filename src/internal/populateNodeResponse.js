@@ -52,12 +52,13 @@ export const populateNodeResponse = (
       nodeResponse.end()
     },
   })
-
-  cancellationToken.register(() => {
+  const cancellation = cancellationToken.register(() => {
+    cancellation.unregister()
     subscription.unsubscribe()
     nodeResponse.destroy()
   })
   nodeResponse.once("close", () => {
+    cancellation.unregister()
     // close body in case nodeResponse is prematurely closed
     // while body is writing
     // it may happen in case of server sent event
