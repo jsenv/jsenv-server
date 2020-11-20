@@ -9,7 +9,7 @@ import {
   composeCancellationToken,
   createCancellationSource,
   isCancelError,
-  executeAsyncFunction
+  executeAsyncFunction,
 } from "@jsenv/cancellation"
 import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
 import { memoize } from "@jsenv/util"
@@ -41,6 +41,8 @@ import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
 import { findFreePort } from "./findFreePort.js"
 import { trackServerRequest } from "./internal/trackServerRequest.js"
 import { timeFunction, timingToServerTimingResponseHeaders } from "./serverTiming.js"
+import { jsenvServerInternalErrorToResponse } from "./jsenvServerInternalErrorToResponse.js"
+import { negotiateContentType } from "./negotiateContentType.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -84,23 +86,8 @@ export const startServer = async ({
 
   // https://www.w3.org/TR/server-timing/
   sendServerTiming = false,
-  sendInternalErrorStack = false,
-  internalErrorToResponseProperties = (error) => {
-    const body = error
-      ? JSON.stringify({
-          code: error.code || "UNKNOWN_ERROR",
-          ...(sendInternalErrorStack ? { stack: error.stack } : {}),
-        })
-      : JSON.stringify({ code: "VALUE_THROWED", value: error })
-
-    return {
-      headers: {
-        "content-type": "application/json",
-        "content-length": Buffer.byteLength(body),
-      },
-      body,
-    }
-  },
+  sendServerInternalErrorStack = false,
+  serverInternalErrorToResponse = jsenvServerInternalErrorToResponse,
 
   requestWaitingMs = 20000,
   requestWaitingCallback = (request, { logger }) => {
@@ -322,6 +309,20 @@ ${error.stack}`)
           timingToServerTimingResponseHeaders(serverTiming),
           response.headers,
         )
+
+        const requestAcceptHeader = request.headers.accept
+        const responseContentTypeHeader = response.headers["content-type"]
+        if (
+          requestAcceptHeader &&
+          responseContentTypeHeader &&
+          !negotiateContentType(request, [responseContentTypeHeader])
+        ) {
+          logger.warn(`response content type is not in the request accepted content types.
+--- response content-type header ---
+${responseContentTypeHeader}
+--- request accept header ---
+${requestAcceptHeader}`)
+        }
       }
 
       logger.info(`${request.method} ${request.origin}${request.ressource}`)
@@ -469,7 +470,10 @@ ${request.method} ${request.origin}${request.ressource}`)
                 "content-type": "text/plain",
               },
             }),
-            internalErrorToResponseProperties(error),
+            serverInternalErrorToResponse(error, {
+              request,
+              sendServerInternalErrorStack,
+            }),
           ),
           error,
         }
