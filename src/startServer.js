@@ -86,7 +86,7 @@ export const startServer = async ({
 
   // https://www.w3.org/TR/server-timing/
   sendServerTiming = false,
-  sendServerInternalErrorStack = false,
+  sendServerInternalErrorDetails = false,
   serverInternalErrorToResponse = jsenvServerInternalErrorToResponse,
 
   requestWaitingMs = 20000,
@@ -472,7 +472,7 @@ ${request.method} ${request.origin}${request.ressource}`)
             }),
             serverInternalErrorToResponse(error, {
               request,
-              sendServerInternalErrorStack,
+              sendServerInternalErrorDetails,
             }),
           ),
           error,

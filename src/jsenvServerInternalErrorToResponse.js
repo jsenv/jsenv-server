@@ -2,7 +2,7 @@ import { negotiateContentType } from "./negotiateContentType.js"
 
 export const jsenvServerInternalErrorToResponse = (
   serverInternalError,
-  { request, sendServerInternalErrorStack = false },
+  { request, sendServerInternalErrorDetails = false },
 ) => {
   const serverInternalErrorIsAPrimitive =
     serverInternalError === null ||
@@ -15,11 +15,27 @@ export const jsenvServerInternalErrorToResponse = (
       }
     : {
         code: serverInternalError.code || "UNKNOWN_ERROR",
-        ...(sendServerInternalErrorStack ? { stack: serverInternalError.stack } : {}),
+        ...(sendServerInternalErrorDetails
+          ? {
+              stack: serverInternalError.stack,
+              ...serverInternalError,
+            }
+          : {}),
       }
 
   const availableContentTypes = {
     "text/html": () => {
+      const renderHtmlForErrorWithoutDetails = () => {
+        return `<p>Details not available: to enable them server must be started with sendServerInternalErrorDetails: true.</p>`
+      }
+
+      const renderHtmlForErrorWithDetails = () => {
+        if (serverInternalErrorIsAPrimitive) {
+          return `<pre>${JSON.stringify(serverInternalError, null, "  ")}</pre>`
+        }
+        return `<pre>${serverInternalError.stack}</pre>`
+      }
+
       const body = `<!DOCTYPE html>
 <html>
   <head>
@@ -29,8 +45,20 @@ export const jsenvServerInternalErrorToResponse = (
   </head>
 
   <body>
-    <h1>An internal server error occured (${dataToSend.code})</h1>
-    <pre>${dataToSend.stack}</pre>
+    <h1>Internal server error</h1>
+    <p>${
+      serverInternalErrorIsAPrimitive
+        ? `Code inside server has thrown a literal.`
+        : `Code inside server has thrown an error.`
+    }</p>
+    <details>
+      <summary>See internal error details</summary>
+      ${
+        sendServerInternalErrorDetails
+          ? renderHtmlForErrorWithDetails()
+          : renderHtmlForErrorWithoutDetails()
+      }
+    </details>
   </body>
 </html>`
 
