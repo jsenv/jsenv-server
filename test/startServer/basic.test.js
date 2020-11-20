@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, fetchUrl } from "../../index.js"
+import { startServer, fetchUrl } from "@jsenv/server"
 
 const { origin } = await startServer({
   logLevel: "warn",
