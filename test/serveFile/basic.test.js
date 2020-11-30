@@ -68,7 +68,7 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
   const fileUrl = resolveUrl(requestRessource, testDirectoryUrl)
   const actual = await serveFile(fileUrl)
   const expected = {
-    status: 400,
+    status: 404,
     headers: {
       "content-type": "text/plain",
       "content-length": actual.headers["content-length"],

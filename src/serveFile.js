@@ -62,7 +62,7 @@ export const serveFile = async (
   } catch (e) {
     const body = `Cannot serve file because source is not a file url: ${source}`
     return {
-      status: 400,
+      status: 404,
       headers: {
         "content-type": "text/plain",
         "content-length": Buffer.byteLength(body),
