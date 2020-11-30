@@ -61,3 +61,19 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
   }
   assert({ actual, expected })
 }
+
+{
+  const requestUrl = "https://example.com/https://www.mozilla.org/fr"
+  const requestRessource = new URL(requestUrl).pathname.slice(1)
+  const fileUrl = resolveUrl(requestRessource, testDirectoryUrl)
+  const actual = await serveFile(fileUrl)
+  const expected = {
+    status: 400,
+    headers: {
+      "content-type": "text/plain",
+      "content-length": actual.headers["content-length"],
+    },
+    body: `Cannot serve file because source is not a file url: https://www.mozilla.org/fr`,
+  }
+  assert({ actual, expected })
+}

@@ -56,7 +56,20 @@ export const serveFile = async (
     }
   }
 
-  const sourceUrl = assertAndNormalizeFileUrl(source)
+  let sourceUrl
+  try {
+    sourceUrl = assertAndNormalizeFileUrl(source)
+  } catch (e) {
+    const body = `Cannot serve file because source is not a file url: ${source}`
+    return {
+      status: 400,
+      headers: {
+        "content-type": "text/plain",
+        "content-length": Buffer.byteLength(body),
+      },
+      body,
+    }
+  }
 
   try {
     const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () =>

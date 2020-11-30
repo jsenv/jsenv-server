@@ -42,7 +42,7 @@ startServer({
 })
 ```
 
-For node < 13 use
+`@jsenv/server` can also be required if you need to.
 
 ```js
 const { startServer } = require("@jsenv/server")
