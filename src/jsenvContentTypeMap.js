@@ -8,6 +8,9 @@ export const jsenvContentTypeMap = {
   "application/importmap+json": {
     extensions: ["importmap"],
   },
+  "application/manifest+json": {
+    extensions: ["webmanifest"],
+  },
   "application/octet-stream": {},
   "application/pdf": {
     extensions: ["pdf"],
@@ -74,6 +77,9 @@ export const jsenvContentTypeMap = {
   },
   "text/css": {
     extensions: ["css"],
+  },
+  "text/x-sass": {
+    extensions: ["sass"],
   },
   "text/cache-manifest": {
     extensions: ["appcache"],
