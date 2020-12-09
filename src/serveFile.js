@@ -1,11 +1,15 @@
 import { createReadStream, promises, statSync } from "fs"
 import {
+  assertAndNormalizeDirectoryUrl,
+  resolveUrl,
+  resolveDirectoryUrl,
   bufferToEtag,
-  assertAndNormalizeFileUrl,
   readDirectory,
   urlToFileSystemPath,
+  urlToRelativeUrl,
 } from "@jsenv/util"
-import { createCancellationToken, createOperation } from "@jsenv/cancellation"
+import { createOperation } from "@jsenv/cancellation"
+import { negotiateContentType } from "./negotiateContentType.js"
 import { timeFunction } from "./serverTiming.js"
 import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemErrorToResponseProperties.js"
 import { urlToContentType } from "./urlToContentType.js"
@@ -18,11 +22,9 @@ const ETAG_CACHE = new Map()
 const ETAG_CACHE_MAX_SIZE = 500
 
 export const serveFile = async (
-  source,
+  request,
   {
-    cancellationToken = createCancellationToken(),
-    method = "GET",
-    headers = {},
+    rootDirectoryUrl,
     contentTypeMap = jsenvContentTypeMap,
     etagEnabled = false,
     etagCacheDisabled = false,
@@ -32,6 +34,19 @@ export const serveFile = async (
     readableStreamLifetimeInSeconds = 5,
   } = {},
 ) => {
+  try {
+    rootDirectoryUrl = assertAndNormalizeDirectoryUrl(rootDirectoryUrl)
+  } catch (e) {
+    const body = `Cannot serve file because rootDirectoryUrl parameter is not a directory url: ${rootDirectoryUrl}`
+    return {
+      status: 404,
+      headers: {
+        "content-type": "text/plain",
+        "content-length": Buffer.byteLength(body),
+      },
+      body,
+    }
+  }
   // here you might be tempted to add || cacheControl === 'no-cache'
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
@@ -50,33 +65,24 @@ export const serveFile = async (
     mtimeEnabled = false
   }
 
+  const { method, ressource } = request
   if (method !== "GET" && method !== "HEAD") {
     return {
       status: 501,
     }
   }
 
-  let sourceUrl
-  try {
-    sourceUrl = assertAndNormalizeFileUrl(source)
-  } catch (e) {
-    const body = `Cannot serve file because source is not a file url: ${source}`
-    return {
-      status: 404,
-      headers: {
-        "content-type": "text/plain",
-        "content-length": Buffer.byteLength(body),
-      },
-      body,
-    }
-  }
+  let sourceUrl = resolveUrl(ressource.slice(1), rootDirectoryUrl)
+  const sourceFileSystemPath = urlToFileSystemPath(sourceUrl)
 
   try {
     const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () =>
-      statSync(urlToFileSystemPath(sourceUrl)),
+      statSync(sourceFileSystemPath),
     )
 
     if (sourceStat.isDirectory()) {
+      sourceUrl = resolveDirectoryUrl(ressource.slice(1), rootDirectoryUrl)
+
       if (canReadDirectory === false) {
         return {
           status: 403,
@@ -89,24 +95,63 @@ export const serveFile = async (
         "file service>read directory",
         () =>
           createOperation({
-            cancellationToken,
+            cancellationToken: request.cancellationToken,
             start: () => readDirectory(sourceUrl),
           }),
       )
-      const directoryContentJson = JSON.stringify(directoryContentArray)
 
-      return {
-        status: 200,
-        headers: {
-          "content-type": "application/json",
-          "content-length": directoryContentJson.length,
+      const responseProducers = {
+        "application/json": () => {
+          const directoryContentJson = JSON.stringify(directoryContentArray)
+          return {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "content-length": directoryContentJson.length,
+            },
+            body: directoryContentJson,
+            timing: {
+              ...readStatTiming,
+              ...readDirectoryTiming,
+            },
+          }
         },
-        body: directoryContentJson,
-        timing: {
-          ...readStatTiming,
-          ...readDirectoryTiming,
+        "text/html": () => {
+          const directoryAsHtml = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Directory explorer</title>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+  </head>
+
+  <body>
+    <h1>Content of directory ${sourceUrl}</h1>
+    <ul>
+      ${directoryContentArray.map((filename) => {
+        const fileUrl = resolveUrl(filename, sourceUrl)
+        const fileUrlRelativeToServer = urlToRelativeUrl(fileUrl, rootDirectoryUrl)
+        return `<li>
+        <a href="/${fileUrlRelativeToServer}">${fileUrlRelativeToServer}</a>
+      </li>`
+      }).join(`
+      `)}
+    </ul>
+  </body>
+</html>`
+
+          return {
+            status: 200,
+            headers: {
+              "content-type": "text/html",
+              "content-length": Buffer.byteLength(directoryAsHtml),
+            },
+            body: directoryAsHtml,
+          }
         },
       }
+      const bestContentType = negotiateContentType(request, Object.keys(responseProducers))
+      return responseProducers[bestContentType || "application/json"]()
     }
 
     // not a file, give up
@@ -117,13 +162,10 @@ export const serveFile = async (
       }
     }
 
-    const clientCacheResponse = await getClientCacheResponse({
-      cancellationToken,
+    const clientCacheResponse = await getClientCacheResponse(request, {
       etagEnabled,
       etagCacheDisabled,
       mtimeEnabled,
-      method,
-      headers,
       sourceStat,
       sourceUrl,
     })
@@ -142,14 +184,10 @@ export const serveFile = async (
       )
     }
 
-    const rawResponse = await getRawResponse({
-      cancellationToken,
-      canReadDirectory,
-      contentTypeMap,
-      method,
-      headers,
+    const rawResponse = await getRawResponse(request, {
       sourceStat,
       sourceUrl,
+      contentTypeMap,
     })
 
     if (rawResponse.body) {
@@ -193,57 +231,47 @@ export const serveFile = async (
   }
 }
 
-const getClientCacheResponse = async ({
-  headers,
-  etagEnabled,
-  etagCacheDisabled,
-  mtimeEnabled,
-  ...rest
-}) => {
+const getClientCacheResponse = async (
+  request,
+  { etagEnabled, etagCacheDisabled, mtimeEnabled, sourceStat, sourceUrl },
+) => {
   // here you might be tempted to add || headers["cache-control"] === "no-cache"
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
 
   if (
-    headers["cache-control"] === "no-store" ||
+    request.headers["cache-control"] === "no-store" ||
     // let's disable it on no-cache too (https://github.com/jsenv/jsenv-server/issues/17)
-    headers["cache-control"] === "no-cache"
+    request.headers["cache-control"] === "no-cache"
   ) {
     return { status: 200 }
   }
 
   if (etagEnabled) {
-    return getEtagResponse({
+    return getEtagResponse(request, {
       etagCacheDisabled,
-      headers,
-      ...rest,
+      sourceStat,
+      sourceUrl,
     })
   }
 
   if (mtimeEnabled) {
-    return getMtimeResponse({
-      headers,
-      ...rest,
+    return getMtimeResponse(request, {
+      sourceStat,
     })
   }
 
   return { status: 200 }
 }
 
-const getEtagResponse = async ({
-  etagCacheDisabled,
-  cancellationToken,
-  sourceUrl,
-  sourceStat,
-  headers,
-}) => {
+const getEtagResponse = async (request, { etagCacheDisabled, sourceUrl, sourceStat }) => {
   const [computeEtagTiming, fileContentEtag] = await timeFunction(
     "file service>generate file etag",
-    () => computeEtag({ cancellationToken, etagCacheDisabled, headers, sourceUrl, sourceStat }),
+    () => computeEtag(request, { etagCacheDisabled, sourceUrl, sourceStat }),
   )
 
-  const requestHasIfNoneMatchHeader = "if-none-match" in headers
-  if (requestHasIfNoneMatchHeader && headers["if-none-match"] === fileContentEtag) {
+  const requestHasIfNoneMatchHeader = "if-none-match" in request.headers
+  if (requestHasIfNoneMatchHeader && request.headers["if-none-match"] === fileContentEtag) {
     return {
       status: 304,
       timing: computeEtagTiming,
@@ -259,7 +287,7 @@ const getEtagResponse = async ({
   }
 }
 
-const computeEtag = async ({ cancellationToken, etagCacheDisabled, sourceUrl, sourceStat }) => {
+const computeEtag = async (request, { etagCacheDisabled, sourceUrl, sourceStat }) => {
   if (!etagCacheDisabled) {
     const etagCacheEntry = ETAG_CACHE.get(sourceUrl)
     if (etagCacheEntry && fileStatAreTheSame(etagCacheEntry.sourceStat, sourceStat)) {
@@ -267,7 +295,7 @@ const computeEtag = async ({ cancellationToken, etagCacheDisabled, sourceUrl, so
     }
   }
   const fileContentAsBuffer = await createOperation({
-    cancellationToken,
+    cancellationToken: request.cancellationToken,
     start: () => readFile(urlToFileSystemPath(sourceUrl)),
   })
   const eTag = bufferToEtag(fileContentAsBuffer)
@@ -301,11 +329,11 @@ const fileStatKeysToCompare = [
   "blksize",
 ]
 
-const getMtimeResponse = async ({ sourceStat, headers }) => {
-  if ("if-modified-since" in headers) {
+const getMtimeResponse = async (request, { sourceStat }) => {
+  if ("if-modified-since" in request.headers) {
     let cachedModificationDate
     try {
-      cachedModificationDate = new Date(headers["if-modified-since"])
+      cachedModificationDate = new Date(request.headers["if-modified-since"])
     } catch (e) {
       return {
         status: 400,
@@ -329,7 +357,7 @@ const getMtimeResponse = async ({ sourceStat, headers }) => {
   }
 }
 
-const getRawResponse = async ({ sourceStat, sourceUrl, contentTypeMap }) => {
+const getRawResponse = async (request, { sourceStat, sourceUrl, contentTypeMap }) => {
   return {
     status: 200,
     headers: {

@@ -4,6 +4,7 @@ import { createRequire } from "module"
 import { Agent } from "https"
 import { createCancellationToken } from "@jsenv/cancellation"
 import { serveFile } from "./serveFile.js"
+import { urlToOrigin, urlToRessource } from "@jsenv/util"
 
 const require = createRequire(import.meta.url)
 const nodeFetch = require("node-fetch")
@@ -30,8 +31,14 @@ export const fetchUrl = async (
   }
 
   if (url.startsWith("file://")) {
-    const { status, statusText, headers, body } = await serveFile(url, {
+    const request = {
       cancellationToken,
+      method: options.method || "GET",
+      headers: options.headers || {},
+      ressource: urlToRessource(url),
+    }
+    const { status, statusText, headers, body } = await serveFile(request, {
+      rootDirectoryUrl: urlToOrigin(url),
       cacheStrategy,
       canReadDirectory,
       contentTypeMap,

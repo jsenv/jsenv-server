@@ -15,8 +15,7 @@ const server = await startServer({
   http2: true,
   port: 3456,
   requestToResponse: (request) => {
-    const fileUrl = resolveUrl(request.ressource.slice(1), testDirectoryUrl)
-    return serveFile(fileUrl, request)
+    return serveFile(request, { rootDirectoryUrl: testDirectoryUrl })
   },
 })
 const browser = await chromium.launch({

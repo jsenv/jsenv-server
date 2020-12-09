@@ -1,14 +1,16 @@
 import { resolveUrl, readFile, bufferToEtag } from "@jsenv/util"
 import { assert } from "@jsenv/assert"
-import { serveFile } from "../../index.js"
+import { serveFile } from "@jsenv/server"
 
 const testDirectoryUrl = resolveUrl("./", import.meta.url)
 
 {
-  const sourceUrl = resolveUrl("./file.js?ok=true", testDirectoryUrl)
-  const actual = await serveFile(sourceUrl, {
+  const request = { method: "GET", ressource: "/file.js?ok=true" }
+  const actual = await serveFile(request, {
+    rootDirectoryUrl: testDirectoryUrl,
     etagEnabled: true,
   })
+  const sourceUrl = resolveUrl(request.ressource.slice(1), testDirectoryUrl)
   const sourceBuffer = await readFile(sourceUrl, { as: "buffer" })
   const expected = {
     status: 200,
@@ -30,8 +32,8 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 }
 
 {
-  const directoryUrl = testDirectoryUrl
-  const actual = await serveFile(directoryUrl)
+  const request = { method: "GET", ressource: "/" }
+  const actual = await serveFile(request, { directoryUrl: testDirectoryUrl })
   const expected = {
     status: 403,
     statusText: "not allowed to read directory",
@@ -43,8 +45,9 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 }
 
 {
-  const directoryUrl = testDirectoryUrl
-  const actual = await serveFile(directoryUrl, {
+  const request = { method: "GET", ressource: "/" }
+  const actual = await serveFile(request, {
+    directoryUrl: testDirectoryUrl,
     canReadDirectory: true,
   })
   const expected = {
@@ -63,10 +66,8 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 }
 
 {
-  const requestUrl = "https://example.com/https://www.mozilla.org/fr"
-  const requestRessource = new URL(requestUrl).pathname.slice(1)
-  const fileUrl = resolveUrl(requestRessource, testDirectoryUrl)
-  const actual = await serveFile(fileUrl)
+  const request = { ressource: "/" }
+  const actual = await serveFile(request, { rootDirectoryUrl: "https://example.com" })
   const expected = {
     status: 404,
     headers: {

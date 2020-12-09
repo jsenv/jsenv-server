@@ -20,10 +20,11 @@ High level api for node.js server.
 - [Installation](#Installation)
 - [Responding to requests](#Responding-to-requests)
 - [Services and composition](#Services-and-composition)
-- [Protocol and certificate](#Protocol-and-certificate)
 - [Server internal error](#Server-internal-error)
+- [Serving files](#Serving-files)
 - [Content type negotiation](#Content-type-negotiation)
 - [Access controls (CORS)](#Access-controls-CORS)
+- [Protocol and certificate](#Protocol-and-certificate)
 - [startServer return value](#startServer-return-value)
 - [See also](#See-also)
 
@@ -76,11 +77,11 @@ This is achieved thanks to a parameter called `requestToResponse` documented bel
 
 ## requestToResponse
 
-`requestToResponse` parameter is a function responsible to generate a response from a request. This parameter is optional with a default value of `() => null`.
+`requestToResponse` parameter is a function responsible to generate a response from a request. This parameter is optional with a default value always returning `null`.
 
-When `requestToResponse` returns `null` or `undefined` server respond to that request with `501 Not implemented`. Below are more information on `request` and `response` objects.
+> When `requestToResponse` returns `null` or `undefined` server respond to that request with `501 Not implemented`.
 
-### request
+## request
 
 `request` is an object representing an http request. `request` are passed as first argument to `requestToResponse`.
 
@@ -145,7 +146,7 @@ startServer({
 
 </details>
 
-### response
+## response
 
 `response` is an object describing a server response. See below some examples that you could return in [requestToResponse](#requestToResponse)
 
@@ -261,69 +262,6 @@ startServer({
 
 </details>
 
-# Protocol and certificate
-
-`startServer` starts a server in https by default. It uses a self signed certificate to do so. You can [pass your own certificate](#pass-your-own-certificate). It's also possible to disable https using [protocol parameter](#protocol).
-
-## Trusting jsenv certificate
-
-Jsenv certificate is meant to be used during development, for this reason it's self signed. When your browser encounter a self signed certificate it displays a warning page telling the server certificate is not trustable. This warning can be annoying and browser have specific behaviour when executing a page with a non trusted certificate (for instance chrome disable cache).
-
-The certificate to trust is `jsenvRootCertificate` in [src/jsenvSignature.js](./src/jsenvSignature.js). The way to trust a certificate depends of your browser and operating system:
-
-- Chrome + MacOS or Safari + MacOS
-  - Import certificate to keychain https://support.apple.com/en-gb/guide/keychain-access/kyca35961/mac
-  - Trust that certificate https://support.apple.com/en-gb/guide/keychain-access/kyca11871/mac
-- Firefox
-  - Import certificate as documented in https://wiki.mozilla.org/PSM:Changing_Trust_Settings
-
-> If you need a file with the jsenv certificate create a `whatever.crt` file and copy paste `jsenvRootCertificate` value in it.
-
-## Pass your own certificate
-
-```js
-import { readFileSync } from "fs"
-import { startServer } from "@jsenv/server"
-
-startServer({
-  protocol: "https",
-  privateKey: readFileSync(`${__dirname}/ssl/private.pem`),
-  certificate: readFileSync(`${__dirname}/ssl/cert.pem`),
-})
-```
-
-> If you don't have a certificate you can omit the `privateKey` and `certificate` parameters and a default certificate will be used. It can be found inside [src/jsenvSignature.js](./src/jsenvSignature.js). You should trust this certificate in your system/browser settings.
-
-### privateKey
-
-`privateKey` parameter is a string containing a private key. This parameter is optionnal with a default value exported in [src/jsenvSignature.js](./src/jsenvSignature.js). This parameter will be used when protocol is `https`.
-
-### certificate
-
-`certificate` parameter is a string containing a certificate. This parameter is optionnal with a default value exported in [src/jsenvSignature.js](./src/jsenvSignature.js). This parameter will be used when protocol is `https`.
-
-## protocol
-
-`protocol` parameter is a string which is either `"http"` or `"https"`. This parameter is optional with a default value of `"http"`.
-
-If you use `https` protocol you can provide your own certificate using `privateKey` and `certificate` parameters.
-
-## redirectHttpToHttps
-
-`redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made receiving in http to https. This parameter is optional and enabled by default.
-
-> This parameter is incompatible with [http2 parameter](#http2). If both are enabled a warning is logged and `redirectHttpToHttps` is ignored.
-
-## http2
-
-`http2` parameter is a boolean controlling if server uses http2 or http1. This parameter is optional and disabled by default.
-
-## http1Allowed
-
-`http1Allowed` parameter is a boolean controlling if server accepts client requesting it using http1 even if server was started with http2 parameter enabled. This parameter is optional and enabled by default.
-
-— see [allowHTTP1 documentation on Node.js](https://nodejs.org/dist/latest-v13.x/docs/api/http2.html#http2_http2_createsecureserver_options_onrequesthandler)
-
 # Server internal error
 
 A server internal error is when an error is thrown inside [requestToResponse](#requestToResponse). When it happens a function becomes responsible to turn this error into an http response. This function is called `serverInternalErrorToResponse`.
@@ -373,8 +311,6 @@ startServer({
 
 </details>
 
-### Custom serverInternalErrorToResponse
-
 You can customize this behaviour by passing your own `serverInternalErrorToResponse`. This function is asynchronous and receive `error` as first parameter. It can also access `request` and `sendServerInternalErrorDetails` by destructuring its second parameter.
 
 <details>
@@ -408,9 +344,87 @@ startServer({
 
 </details>
 
+# Serving files
+
+A server often needs to serve file without routing logic. Either the file is there and server sends it, or it responds with a 404 status code. You can use `serveFile` exports to do that.
+
+`serveFile` is an async function that will search for a file on your filesysten and produce a response for it.
+
+<details>
+  <summary>Serve file code example</summary>
+
+```js
+import { startServer, serveFile } from "@jsenv/server"
+
+const rootDirectoryUrl = new URL("./", import.meta.url)
+
+startServer({
+  requestToResponse: (request) => {
+    return serveFile(request, { rootDirectoryUrl })
+  },
+})
+```
+
+> When request.method is not `"HEAD"` or `"GET"` the returned response correspond to `501 not implemented`.
+
+— source code at [src/serveFile.js](../src/serveFile.js).
+
+</details>
+
+You can configured how `serveFile` handle cache and content types.
+
+## Configuring served files cache
+
+When the request headers contains `if-modified-since` and
+`if-none-match`. They will be checked according to `etagEnabled` and `mtimeEnabled` parameters.
+
+## cacheControl
+
+`cacheControl` parameter is a string that will become the response `cache-control` header value. This parameter is optional with a default value of `"no-store"`. When `etagEnabled` or `mtimeEnabled` is true, this parameter default value is `"private,max-age=0,must-revalidate"`
+
+Check https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control for more information about this header.
+
+## etagEnabled
+
+`etagEnabled` parameter is a boolean enabling `etag` headers. When enabled server sends `etag` response header and check presence of `if-none-match` on request headers to produce 304 response when file content has not been modified since the last request. 304 means file content still matches the previous etag. This parameter is optional and disabled by default.
+
+### mtimeEnabled
+
+`mtimeEnabled` parameter is a boolean enabled `mtime` headers. When enabled server sends `last-modified` response header and check presence of `if-modified-since` on request headers to be to produce 304 response when file has not been modified since the last request. 304 means file modification time on the filesystem is equal of before the previous modification time. This parameter is optional and disabled by default.
+
+## Configuring served files content type
+
+Jsenv uses file extension to decide the content-type response header. The default content type mapping exported in [src/jsenvContentTypeMap.js](./src/jsenvContentTypeMap.js) contains well known content types used in the web. If one is missing, please submit a pull request to add it. It's also possible to override or extend this mapping using `contentTypeMap` parameter.
+
+<details>
+  <summary>Code adding content type mapping</summary>
+
+```js
+import { startServer, serveFile, jsenvContentTypeMap } from "@jsenv/server"
+
+startServer({
+  requestToResponse: (request) => {
+    return serveFile(request, {
+      rootDirectoryUrl: "/Users/you/folder/",
+      contentTypeMap: {
+        ...jsenvContentTypeMap,
+        "application/x-whatever": {
+          extensions: ["whatever", "whatever-2"],
+        },
+      },
+    })
+  },
+})
+```
+
+</details>
+
 # Content type negotiation
 
 You can use `negotiateContentType` to respond requests prefered content-type.
+
+<details>
+  <summary>Code using content type negotiation</summary>
 
 ```js
 import { negotiateContentType, startServer } from "@jsenv/server"
@@ -452,49 +466,135 @@ const availableContentTypes = {
 }
 ```
 
+</details>
+
 # Access controls (CORS)
 
 All parameters starting with `accessControl` are related to cross origin ressource sharing, also called CORS. The default CORS parameters values are set to disable CORS. `@jsenv/server` takes care of setting CORS headers on all responses generated by [requestToResponse](#requestToResponse) or [serverInternalErrorToResponse](#serverInternalErrorToResponse).
 
 > As soon as you pass `accessControlAllowRequestOrigin` or `accessControlAllowedOrigins` parameter it means your server use CORS.
 
-### accessControlAllowedOrigins
+<details>
+  <summary>Code enabling CORS for a dev server</summary>
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  accessControlAllowRequestOrigin: true,
+  accessControlAllowRequestMethod: true,
+  accessControlAllowRequestHeaders: true,
+  accessControlAllowCredentials: true,
+})
+```
+
+</details>
+
+## accessControlAllowedOrigins
 
 `accessControlAllowedOrigins` parameter is an array of origins allowed when requesting your server. This parameter is optional with a default value of `[]`.
 
-### accessControlAllowedMethods
+## accessControlAllowedMethods
 
 `accessControlAllowedMethods` parameter is an array or methods allowed when requesting your server. This parameter is optional with a default value of `["GET", "POST", "PUT", "DELETE", "OPTIONS"]`
 
-### accessControlAllowedHeaders
+## accessControlAllowedHeaders
 
 `accessControlAllowedHeaders` parameter is an array of headers allowed when requesting your server. This parameter is optional with a default value of `["x-requested-with"]`.
 
-### accessControlAllowRequestOrigin
+## accessControlAllowRequestOrigin
 
 `accessControlAllowRequestOrigin` parameter is a boolean controlling if request origin is auto allowed. This parameter is optional with a default value of `false`.
 
 Use this parameter to allow any origin.
 
-### accessControlAllowRequestMethod
+## accessControlAllowRequestMethod
 
 `accessControlAllowRequestMethod` parameter is a boolean controlling if request method is auto allowed. This parameter is optional with a default value of `false`.
 
 Use this parameter to allowed any request method.
 
-### accessControlAllowRequestHeaders
+## accessControlAllowRequestHeaders
 
 `accessControlAllowRequestHeaders` parameter is a boolean controlling if request headers are auto allowed. This parameter is optional with a default value of `false`.
 
 Use this parameter to allowed any request headers.
 
-### accessControlAllowCredentials
+## accessControlAllowCredentials
 
 `accessControlAllowCredentials` parameter is a boolean controlling if request credentials are allowed when requesting your server. This parameter is optional with a default value of `false`.
 
-### accessControlMaxAge
+## accessControlMaxAge
 
 `accessControlMaxAge` parameter is a number representing an amount of seconds that can be used by client to cache access control headers values. This parameter is optional with a default value of `600`.
+
+# Protocol and certificate
+
+`startServer` starts a server in https by default. It uses a self signed certificate to do so. You can [pass your own certificate](#pass-your-own-certificate). It's also possible to disable https using [protocol parameter](#protocol).
+
+## Trusting jsenv certificate
+
+Jsenv certificate is meant to be used during development, for this reason it's self signed. When your browser encounter a self signed certificate it displays a warning page telling the server certificate is not trustable. This warning can be annoying and browser have specific behaviour when executing a page with a non trusted certificate (for instance chrome disable cache).
+
+The certificate to trust is `jsenvRootCertificate` in [src/jsenvSignature.js](./src/jsenvSignature.js). The way to trust a certificate depends of your browser and operating system:
+
+- Chrome + MacOS or Safari + MacOS
+  - Import certificate to keychain https://support.apple.com/en-gb/guide/keychain-access/kyca35961/mac
+  - Trust that certificate https://support.apple.com/en-gb/guide/keychain-access/kyca11871/mac
+- Firefox
+  - Import certificate as documented in https://wiki.mozilla.org/PSM:Changing_Trust_Settings
+
+> If you need a file with the jsenv certificate create a `whatever.crt` file and copy paste `jsenvRootCertificate` value in it.
+
+## Using a custom certificate
+
+If you don't have a certificate you can omit the `privateKey` and `certificate` parameters and a default certificate will be used. It can be found inside [src/jsenvSignature.js](./src/jsenvSignature.js). You should trust this certificate in your system/browser settings.
+
+<details>
+  <summary>Code using a custom certificate</summary>
+
+```js
+import { readFileSync } from "fs"
+import { startServer } from "@jsenv/server"
+
+startServer({
+  protocol: "https",
+  privateKey: readFileSync(`${__dirname}/ssl/private.pem`),
+  certificate: readFileSync(`${__dirname}/ssl/cert.pem`),
+})
+```
+
+</details>
+
+### privateKey
+
+`privateKey` parameter is a string containing a private key. This parameter is optionnal with a default value exported in [src/jsenvSignature.js](./src/jsenvSignature.js). This parameter will be used when protocol is `https`.
+
+### certificate
+
+`certificate` parameter is a string containing a certificate. This parameter is optionnal with a default value exported in [src/jsenvSignature.js](./src/jsenvSignature.js). This parameter will be used when protocol is `https`.
+
+## protocol
+
+`protocol` parameter is a string which is either `"http"` or `"https"`. This parameter is optional with a default value of `"http"`.
+
+If you use `https` protocol you can provide your own certificate using `privateKey` and `certificate` parameters.
+
+## redirectHttpToHttps
+
+`redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made receiving in http to https. This parameter is optional and enabled by default.
+
+> This parameter is incompatible with [http2 parameter](#http2). If both are enabled a warning is logged and `redirectHttpToHttps` is ignored.
+
+## http2
+
+`http2` parameter is a boolean controlling if server uses http2 or http1. This parameter is optional and disabled by default.
+
+## http1Allowed
+
+`http1Allowed` parameter is a boolean controlling if server accepts client requesting it using http1 even if server was started with http2 parameter enabled. This parameter is optional and enabled by default.
+
+— see [allowHTTP1 documentation on Node.js](https://nodejs.org/dist/latest-v13.x/docs/api/http2.html#http2_http2_createsecureserver_options_onrequesthandler)
 
 # See also
 
