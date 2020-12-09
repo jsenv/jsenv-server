@@ -31,14 +31,20 @@ export const fetchUrl = async (
   }
 
   if (url.startsWith("file://")) {
+    const origin = urlToOrigin(url)
+    let ressource = urlToRessource(url)
+    if (process.platform === "win32") {
+      ressource = `/${replaceBackSlashesWithSlashes(ressource)}`
+    }
+
     const request = {
       cancellationToken,
       method: options.method || "GET",
       headers: options.headers || {},
-      ressource: urlToRessource(url),
+      ressource,
     }
     const { status, statusText, headers, body } = await serveFile(request, {
-      rootDirectoryUrl: urlToOrigin(url),
+      rootDirectoryUrl: origin,
       cacheStrategy,
       canReadDirectory,
       contentTypeMap,
@@ -110,6 +116,8 @@ export const fetchUrl = async (
 
   return simplified ? standardResponseToSimplifiedResponse(response) : response
 }
+
+const replaceBackSlashesWithSlashes = (string) => string.replace(/\\/g, "/")
 
 const standardResponseToSimplifiedResponse = async (response) => {
   const text = await response.text()
