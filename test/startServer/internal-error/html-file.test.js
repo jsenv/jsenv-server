@@ -19,9 +19,9 @@ const readHtmlFiles = async () => {
   const htmlFilenames = await readDirectory(htmlFilesDirectory)
 
   const htmlFiles = {}
-  htmlFilenames.forEach(() => {
+  htmlFilenames.forEach((htmlFilename) => {
     // to ensure order is predictable
-    htmlFiles[htmlFilenames] = null
+    htmlFiles[htmlFilename] = null
   })
   await Promise.all(
     htmlFilenames.map(async (htmlFilename) => {
