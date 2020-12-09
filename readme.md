@@ -375,22 +375,80 @@ You can configured how `serveFile` handle cache and content types.
 
 ## Configuring served files cache
 
-When the request headers contains `if-modified-since` and
-`if-none-match`. They will be checked according to `etagEnabled` and `mtimeEnabled` parameters.
+When server receives a request it can decids to respond with `304 Not modified` and an empty response body instead of `200 OK` and file content in the response body. By default `serveFile` will always respond with `200`. You can enable cache using either `etag` or `mtime` based caching.
 
-## cacheControl
+> `mtime` is faster than `etag` but less reobust because it assumes filesystem dates are reliable.
 
-`cacheControl` parameter is a string that will become the response `cache-control` header value. This parameter is optional with a default value of `"no-store"`. When `etagEnabled` or `mtimeEnabled` is true, this parameter default value is `"private,max-age=0,must-revalidate"`
+<details>
+  <summary>Etag headers</summary>
 
-Check https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control for more information about this header.
+```js
+import { startServer, serveFile } from "@jsenv/server"
 
-## etagEnabled
+const rootDirectoryUrl = new URL("./", import.meta.url)
 
-`etagEnabled` parameter is a boolean enabling `etag` headers. When enabled server sends `etag` response header and check presence of `if-none-match` on request headers to produce 304 response when file content has not been modified since the last request. 304 means file content still matches the previous etag. This parameter is optional and disabled by default.
+startServer({
+  requestToResponse: (request) => {
+    return serveFile(request, {
+      rootDirectoryUrl,
+      etagEnabled: true,
+    })
+  },
+})
+```
 
-### mtimeEnabled
+> When request headers contains `if-none-match`, `serveFile` generates file content etag. The generated etag and the one found in request headers are compared to decide if response is 304 or 200.
 
-`mtimeEnabled` parameter is a boolean enabled `mtime` headers. When enabled server sends `last-modified` response header and check presence of `if-modified-since` on request headers to be to produce 304 response when file has not been modified since the last request. 304 means file modification time on the filesystem is equal of before the previous modification time. This parameter is optional and disabled by default.
+</details>
+
+<details>
+  <summary>Mtime headers</summary>
+
+```js
+import { startServer, serveFile } from "@jsenv/server"
+
+const rootDirectoryUrl = new URL("./", import.meta.url)
+
+startServer({
+  requestToResponse: (request) => {
+    return serveFile(request, {
+      rootDirectoryUrl,
+      mtimeEnabled: true,
+    })
+  },
+})
+```
+
+> When request headers contains `if-modified-since`, `serveFile` reads file modification time on the filesystem. The filesystem modification time and the one found in request headers are compared to decide if response is 304 or 200. Date comparison is precise to the millisecond.
+
+</details>
+
+It is also possible to configure `cache-control` response header value using `cacheControl` parameter. Remove more about this header at https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control.
+
+> In dev you likely don't want to enable cache-control headers.
+
+<details>
+  <summary>Cache control code example</summary>
+
+```js
+import { startServer, serveFile } from "@jsenv/server"
+
+const rootDirectoryUrl = new URL("./", import.meta.url)
+
+startServer({
+  requestToResponse: (request) => {
+    return serveFile(request, {
+      rootDirectoryUrl,
+      cacheControl:
+        request.ressource === "/"
+          ? `private,max-age=0,must-revalidate`
+          : `private,max-age=3600,immutable`,
+    })
+  },
+})
+```
+
+</details>
 
 ## Configuring served files content type
 
