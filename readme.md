@@ -42,7 +42,7 @@ startServer({
 })
 ```
 
-`@jsenv/server` can also be required if you need to.
+`@jsenv/server` also exports a commonjs compatible entry point. It means you can `require` it.
 
 ```js
 const { startServer } = require("@jsenv/server")

@@ -470,7 +470,7 @@ ${request.method} ${request.origin}${request.ressource}`)
                 "content-type": "text/plain",
               },
             }),
-            serverInternalErrorToResponse(error, {
+            await serverInternalErrorToResponse(error, {
               request,
               sendServerInternalErrorDetails,
             }),
