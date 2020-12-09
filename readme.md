@@ -9,10 +9,6 @@ High level api for node.js server.
 
 # Table of contents
 
-<!-- TODO:
-
-- créer une section dans see also qui pointe vers server sent events + une mini doc -->
-
 - [Presentation](#Presentation)
 - [Installation](#Installation)
 - [Responding to requests](#Responding-to-requests)

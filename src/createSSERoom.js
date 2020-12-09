@@ -34,7 +34,7 @@ export const createSSERoom = ({
   }
 
   const connect = (lastKnownId) => {
-    if (connections.size > maxConnectionAllowed) {
+    if (connections.size >= maxConnectionAllowed) {
       return {
         status: 503,
       }

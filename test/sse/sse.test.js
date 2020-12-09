@@ -13,8 +13,8 @@ const openEventSource = async (url) => {
 
   const messageEvents = []
 
-  eventSource.addEventListener("message", (messageEvent) => {
-    messageEvents.push(messageEvent)
+  eventSource.addEventListener("message", ({ type, data, lastEventId, origin }) => {
+    messageEvents.push({ type, data, lastEventId, origin })
   })
 
   eventSource.getAllMessageEvents = () => messageEvents
@@ -28,7 +28,7 @@ const openEventSource = async (url) => {
 
     eventSource.onerror = (errorEvent) => {
       eventSource.onerror = () => {}
-      if (eventSource.readyState === EventSource.CLOSED) {
+      if (eventSource.readyState === EventSource.CONNECTING) {
         reject(errorEvent)
       }
     }
@@ -65,11 +65,8 @@ const timeEllapsedPromise = (ms) => {
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
-    requestToResponse: (request) => {
-      return room.connect(
-        request.headers["last-event-id"] ||
-          new URL(request.ressource, request.origin).searchParams.get("last-event-id"),
-      )
+    requestToResponse: () => {
+      return room.connect()
     },
   })
   const eventSource = await openEventSource(server.origin)
@@ -142,8 +139,17 @@ const timeEllapsedPromise = (ms) => {
     origin: server.origin,
   }
   assert({ actual, expected })
+
+  {
+    const actual = room.clientCountGetter()
+    const expected = 1
+    assert({ actual, expected })
+  }
+
   await closeEventSource(eventSource)
   await timeEllapsedPromise(200)
+  // ensure event source is properly closed
+  // and room takes that into accout
   {
     const actual = room.clientCountGetter()
     const expected = 0
@@ -152,10 +158,182 @@ const timeEllapsedPromise = (ms) => {
   room.stop()
 }
 
-// client receive events only from the room he is connected to
+// a server can have many rooms and client can connect the one he wants
+{
+  const roomA = createSSERoom()
+  roomA.start()
+  const roomB = createSSERoom()
+  roomB.start()
+  const server = await startServer({
+    logLevel: "warn",
+    keepProcessAlive: false,
+    requestToResponse: (request) => {
+      if (request.ressource === "/roomA") {
+        return roomA.connect(request.headers["last-event-id"])
+      }
+      if (request.ressource === "/roomB") {
+        return roomB.connect(request.headers["last-event-id"])
+      }
+      return null
+    },
+  })
+  const roomAEventSource = await openEventSource(`${server.origin}/roomA`)
+  const roomBEventSource = await openEventSource(`${server.origin}/roomB`)
+  roomA.sendEvent({
+    type: "message",
+    data: "a",
+  })
+  roomB.sendEvent({
+    type: "message",
+    data: "b",
+  })
+  await timeEllapsedPromise(200)
 
-// can have many clients
+  {
+    const actual = roomAEventSource.getAllMessageEvents()
+    const expected = [
+      {
+        type: "message",
+        data: "a",
+        lastEventId: "1",
+        origin: server.origin,
+      },
+    ]
+    assert({ actual, expected })
+  }
+  {
+    const actual = roomBEventSource.getAllMessageEvents()
+    const expected = [
+      {
+        type: "message",
+        data: "b",
+        lastEventId: "1",
+        origin: server.origin,
+      },
+    ]
+    assert({ actual, expected })
+  }
 
-// there is a limit to number of clients
+  await closeEventSource(roomAEventSource)
+  await closeEventSource(roomBEventSource)
+  roomA.stop()
+  roomB.stop()
+}
+
+// a room can have many clients
+{
+  const room = createSSERoom()
+  room.start()
+  const server = await startServer({
+    logLevel: "warn",
+    keepProcessAlive: false,
+    requestToResponse: () => {
+      return room.connect()
+    },
+  })
+  const clientA = await openEventSource(server.origin)
+  const clientB = await openEventSource(server.origin)
+  room.sendEvent({
+    type: "message",
+    data: 42,
+  })
+  await timeEllapsedPromise(200)
+  {
+    const actual = room.clientCountGetter()
+    const expected = 2
+    assert({ actual, expected })
+  }
+  const clientAEvents = clientA.getAllMessageEvents()
+  const clientBEvents = clientB.getAllMessageEvents()
+  {
+    const actual = clientAEvents
+    const expected = [
+      {
+        type: "message",
+        data: "42",
+        lastEventId: "1",
+        origin: server.origin,
+      },
+    ]
+    assert({ actual, expected })
+  }
+  {
+    const actual = clientBEvents
+    const expected = [
+      {
+        type: "message",
+        data: "42",
+        lastEventId: "1",
+        origin: server.origin,
+      },
+    ]
+    assert({ actual, expected })
+  }
+
+  await closeEventSource(clientA)
+  await closeEventSource(clientB)
+  room.stop()
+}
+
+// there can be a limit to number of clients (100 by default)
+{
+  const room = createSSERoom({
+    maxConnectionAllowed: 1,
+  })
+  room.start()
+  const server = await startServer({
+    logLevel: "warn",
+    keepProcessAlive: false,
+    requestToResponse: () => {
+      return room.connect()
+    },
+  })
+  const clientA = await openEventSource(server.origin)
+  try {
+    await openEventSource(server.origin)
+    throw new Error("expected to throw")
+  } catch (errorEvent) {
+    const actual = {
+      type: errorEvent.type,
+      status: errorEvent.status,
+      message: errorEvent.message,
+    }
+    const expected = {
+      type: "error",
+      status: 503,
+      message: "Service Unavailable",
+    }
+    assert({ actual, expected })
+  } finally {
+    await closeEventSource(clientA)
+    room.stop()
+  }
+}
 
 // test whats happens with a room that is not started or is stopped
+{
+  const room = createSSERoom()
+  const server = await startServer({
+    logLevel: "warn",
+    keepProcessAlive: false,
+    requestToResponse: () => {
+      return room.connect()
+    },
+  })
+  try {
+    await openEventSource(server.origin)
+    throw new Error("expected to throw")
+  } catch (errorEvent) {
+    const actual = {
+      type: errorEvent.type,
+      status: errorEvent.status,
+      message: errorEvent.message,
+    }
+    const expected = {
+      type: "error",
+      status: 204,
+      message: "No Content",
+    }
+    assert({ actual, expected })
+  }
+}
