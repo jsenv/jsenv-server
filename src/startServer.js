@@ -55,7 +55,7 @@ export const startServer = async ({
   protocol = "http",
   http2 = false,
   http1Allowed = true,
-  redirectHttpToHttps = false,
+  redirectHttpToHttps = true,
   ip = "0.0.0.0", // will it work on windows ? https://github.com/nodejs/node/issues/14900
   port = 0, // assign a random available port
   portHint,

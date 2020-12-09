@@ -10,12 +10,11 @@ High level api for node.js server.
 # Table of contents
 
 - [Presentation](#Presentation)
-- [Installation](#Installation)
 - [Documentation](#Documentation)
   - [startServer](./docs/start-server.md)
-  - [firstService](./docs/first-service.md)
   - [serveFile](./docs/serve-file.md)
   - [fetchUrl](./docs/fetch-url.md)
+- [Installation](#Installation)
 
 # Presentation
 
@@ -48,17 +47,16 @@ startServer({
 const { startServer } = require("@jsenv/server")
 ```
 
-# Installation
-
-```console
-npm install @jsenv/server
-```
-
 # Documentation
 
 Api can be found in their own pages
 
 - [startServer](./docs/start-server.md)
-- [firstService](./docs/first-service.md)
 - [serveFile](./docs/serve-file.md)
 - [fetchUrl](./docs/fetch-url.md)
+
+# Installation
+
+```console
+npm install @jsenv/server
+```
