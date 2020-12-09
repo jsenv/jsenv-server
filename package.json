@@ -1,6 +1,6 @@
 {
   "name": "@jsenv/server",
-  "version": "4.2.3",
+  "version": "4.2.4",
   "description": "High level api for node.js server.",
   "license": "MIT",
   "repository": {
@@ -55,17 +55,16 @@
   },
   "devDependencies": {
     "@jsenv/assert": "2.2.1",
-    "@jsenv/codecov-upload": "3.4.2",
-    "@jsenv/core": "16.3.0",
-    "@jsenv/eslint-config": "12.6.0",
+    "@jsenv/codecov-upload": "3.4.3",
+    "@jsenv/core": "17.1.5",
+    "@jsenv/eslint-config": "12.8.0",
     "@jsenv/github-release-package": "1.2.2",
-    "@jsenv/node-module-import-map": "12.1.1",
+    "@jsenv/node-module-import-map": "12.2.1",
     "@jsenv/package-publish": "1.5.1",
     "@jsenv/prettier-check-project": "5.6.1",
-    "babel-eslint": "11.0.0-beta.0",
-    "eslint": "7.12.1",
+    "eslint": "7.15.0",
     "node-forge": "0.10.0",
-    "playwright-chromium": "1.5.2",
-    "prettier": "2.1.2"
+    "playwright-chromium": "1.6.2",
+    "prettier": "2.2.1"
   }
 }
