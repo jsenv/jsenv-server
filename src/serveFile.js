@@ -239,10 +239,11 @@ const getClientCacheResponse = async (
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
 
+  const { headers = {} } = request
   if (
-    request.headers["cache-control"] === "no-store" ||
+    headers["cache-control"] === "no-store" ||
     // let's disable it on no-cache too (https://github.com/jsenv/jsenv-server/issues/17)
-    request.headers["cache-control"] === "no-cache"
+    headers["cache-control"] === "no-cache"
   ) {
     return { status: 200 }
   }
@@ -270,8 +271,9 @@ const getEtagResponse = async (request, { etagCacheDisabled, sourceUrl, sourceSt
     () => computeEtag(request, { etagCacheDisabled, sourceUrl, sourceStat }),
   )
 
-  const requestHasIfNoneMatchHeader = "if-none-match" in request.headers
-  if (requestHasIfNoneMatchHeader && request.headers["if-none-match"] === fileContentEtag) {
+  const { headers = {} } = request
+  const requestHasIfNoneMatchHeader = "if-none-match" in headers
+  if (requestHasIfNoneMatchHeader && headers["if-none-match"] === fileContentEtag) {
     return {
       status: 304,
       timing: computeEtagTiming,
@@ -330,10 +332,11 @@ const fileStatKeysToCompare = [
 ]
 
 const getMtimeResponse = async (request, { sourceStat }) => {
-  if ("if-modified-since" in request.headers) {
+  const { headers = {} } = request
+  if ("if-modified-since" in headers) {
     let cachedModificationDate
     try {
-      cachedModificationDate = new Date(request.headers["if-modified-since"])
+      cachedModificationDate = new Date(headers["if-modified-since"])
     } catch (e) {
       return {
         status: 400,

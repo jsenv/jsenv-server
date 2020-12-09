@@ -33,7 +33,7 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 
 {
   const request = { method: "GET", ressource: "/" }
-  const actual = await serveFile(request, { directoryUrl: testDirectoryUrl })
+  const actual = await serveFile(request, { rootDirectoryUrl: testDirectoryUrl })
   const expected = {
     status: 403,
     statusText: "not allowed to read directory",
@@ -47,7 +47,7 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
 {
   const request = { method: "GET", ressource: "/" }
   const actual = await serveFile(request, {
-    directoryUrl: testDirectoryUrl,
+    rootDirectoryUrl: testDirectoryUrl,
     canReadDirectory: true,
   })
   const expected = {
@@ -74,7 +74,7 @@ const testDirectoryUrl = resolveUrl("./", import.meta.url)
       "content-type": "text/plain",
       "content-length": actual.headers["content-length"],
     },
-    body: `Cannot serve file because source is not a file url: https://www.mozilla.org/fr`,
+    body: `Cannot serve file because rootDirectoryUrl parameter is not a directory url: https://example.com`,
   }
   assert({ actual, expected })
 }
