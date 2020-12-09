@@ -15,7 +15,7 @@ const server = await startServer({
   ip: "",
   port: 8998,
   requestToResponse: (request) => {
-    return serveFile(resolveUrl(request.ressource.slice(1), tempDirectoryUrl), request)
+    return serveFile(request, { rootDirectoryUrl: tempDirectoryUrl })
   },
 })
 const fileServerUrl = resolveUrl("./file.js", server.origin)

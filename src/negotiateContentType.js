@@ -1,7 +1,13 @@
 export const negotiateContentType = (request, availableContentTypes) => {
+  const { headers = {} } = request
+  const requestAcceptHeader = headers.accept
+  if (!requestAcceptHeader) {
+    return null
+  }
+
   const availableContentTypesAcceptResults = availableContentTypes.map((availableContentType) => {
     return acceptsContentType({
-      acceptHeader: request.headers.accept,
+      acceptHeader: requestAcceptHeader,
       contentType: availableContentType,
     })
   })

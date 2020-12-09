@@ -4,6 +4,8 @@ import { createObservable } from "./internal/observable.js"
 // https://www.html5rocks.com/en/tutorials/eventsource/basics/
 export const createSSERoom = ({
   logLevel,
+  // do not keep process alive because of rooms, something else must keep it alive
+  keepProcessAlive = false,
   keepaliveDuration = 30 * 1000,
   retryDuration = 1 * 1000,
   historyLength = 1 * 1000,
@@ -32,7 +34,7 @@ export const createSSERoom = ({
   }
 
   const connect = (lastKnownId) => {
-    if (connections.size > maxConnectionAllowed) {
+    if (connections.size >= maxConnectionAllowed) {
       return {
         status: 503,
       }
@@ -140,6 +142,9 @@ export const createSSERoom = ({
   const start = () => {
     state = "started"
     interval = setInterval(keepAlive, keepaliveDuration)
+    if (!keepProcessAlive) {
+      interval.unref()
+    }
   }
 
   const stop = () => {
@@ -156,6 +161,8 @@ export const createSSERoom = ({
     connect,
     eventsSince,
     sendEvent,
+
+    clientCountGetter: () => connections.size,
   }
 }
 
