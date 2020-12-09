@@ -11,9 +11,6 @@ High level api for node.js server.
 
 <!-- TODO:
 
-- inline file service doc dans une section "Serving files"
-- créer une section dans see also qui pointe vers la doc de fetchUrl et pourquoi ça existe
-- créer une section "Server timing headers" + doc
 - créer une section dans see also qui pointe vers server sent events + une mini doc -->
 
 - [Presentation](#Presentation)
@@ -25,6 +22,7 @@ High level api for node.js server.
 - [Content type negotiation](#Content-type-negotiation)
 - [Access controls (CORS)](#Access-controls-CORS)
 - [Protocol and certificate](#Protocol-and-certificate)
+- [Server timing](#Server-timing)
 - [startServer return value](#startServer-return-value)
 - [See also](#See-also)
 
@@ -653,6 +651,97 @@ If you use `https` protocol you can provide your own certificate using `privateK
 `http1Allowed` parameter is a boolean controlling if server accepts client requesting it using http1 even if server was started with http2 parameter enabled. This parameter is optional and enabled by default.
 
 — see [allowHTTP1 documentation on Node.js](https://nodejs.org/dist/latest-v13.x/docs/api/http2.html#http2_http2_createsecureserver_options_onrequesthandler)
+
+# Server timing
+
+Server timing consists into sending headers in the response concerning the server performances. When looking at network panel in chrome devtools you can find a metric called TTFB (Time To First Byte). Without server timing you won't be able to know what your server was doing during that period.
+
+<details>
+  <summary>Screenshots of chrome devtools</summary>
+
+![screenshot of chrome devtools TTFB](./docs/screenshot-devtools-TTFB.png)
+
+![screenshot of chrome devtools server timing](./docs/screenshot-devtools-timing.png)
+
+Thanks to server timing you know what was going on during these `45.80ms`: `43.16ms` were needed by something called `service:compiled files`.
+
+</details>
+
+Read more in https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing
+
+You can track each service timing by replacing `firstService` usage seen in [Services and composition](#Services-and-composition) by `firstServiceWithTiming`. It will measure time taken by each function for you.
+
+<details>
+  <summary>firstServiceWithTiming code example</summary>
+
+```js
+import { startServer, firstServiceWithTiming } from "@jsenv/server"
+
+const noContentService = (request) => {
+  if (request.ressource !== "/") return null
+  return { status: 204 }
+}
+
+const okService = () => {
+  if (request.ressource !== "/whatever") return null
+  return { status: 200 }
+}
+
+startServer({
+  requestToResponse: firstServiceWithTiming({
+    "service:nocontent": noContentService,
+    "service:ok": okService,
+  }),
+})
+```
+
+Code above generates a server timing response header that looks like this:
+
+```console
+server-timing: a;desc="service:nocontent";dur=0.007546901, b;desc="service:ok";dur=0.0018849
+```
+
+</details>
+
+You can also selectively measure time taken by some function using `timeFunction` exports and response `timing` property.
+
+<details>
+  <summary>timeFunction code example</summary>
+
+```js
+import { timeFunction, startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: async () => {
+    const [waitTiming] = await timeFunction("waiting 50ms", async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
+    })
+    const [getMessageTiming, message] = await timeFunction("get message", () => "hello")
+
+    return {
+      status: 200,
+      headers: {
+        "content-type": "text/plain",
+      },
+      body: message,
+      timing: {
+        ...waitTiming,
+        ...getMessageTiming,
+      },
+    }
+  },
+})
+```
+
+Code aboves generates a server timing response headers that looks as below
+
+```console
+server-timing: a;desc="waiting 50ms";dur=50.7546901, b;desc="get message";dur=0.0018849
+```
+
+</details>
 
 # See also
 

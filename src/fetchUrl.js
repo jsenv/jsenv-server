@@ -3,8 +3,8 @@
 import { createRequire } from "module"
 import { Agent } from "https"
 import { createCancellationToken } from "@jsenv/cancellation"
-import { serveFile } from "./serveFile.js"
 import { urlToOrigin, urlToRessource } from "@jsenv/util"
+import { serveFile } from "./serveFile.js"
 
 const require = createRequire(import.meta.url)
 const nodeFetch = require("node-fetch")
