@@ -81,6 +81,6 @@ import { startServer, readRequestBody, fetchUrl } from "@jsenv/server"
     body: "toto",
   })
   const actual = requestBody
-  const expected = new Buffer("toto")
+  const expected = Buffer.from("toto")
   assert({ actual, expected })
 }
