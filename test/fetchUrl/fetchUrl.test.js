@@ -1,6 +1,6 @@
 import { assert } from "@jsenv/assert"
 import { resolveUrl, writeFile, ensureEmptyDirectory, urlToFileSystemPath } from "@jsenv/util"
-import { fetchUrl, startServer } from "../../index.js"
+import { fetchUrl, startServer, headersToObject } from "@jsenv/server"
 import { createCancellationSource } from "@jsenv/cancellation"
 
 const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
@@ -12,7 +12,14 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   const fileContent = "hello world"
   await writeFile(url, fileContent)
 
-  const actual = await fetchUrl(url, { simplified: true, headers: { "cache-control": "no-cache" } })
+  const response = await fetchUrl(url, { headers: { "cache-control": "no-cache" } })
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url,
     status: 200,
@@ -32,7 +39,14 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   const jsData = `const a = true;`
   const jsBase64 = Buffer.from(jsData).toString("base64")
   const url = `data:text/javascript;base64,${jsBase64}`
-  const actual = await fetchUrl(url, { simplified: true })
+  const response = await fetchUrl(url)
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url,
     status: 200,
@@ -50,7 +64,14 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   await ensureEmptyDirectory(tempDirectoryUrl)
   const url = resolveUrl("file.txt", tempDirectoryUrl)
 
-  const actual = await fetchUrl(url, { simplified: true, headers: { "cache-control": "no-cache" } })
+  const response = await fetchUrl(url, { headers: { "cache-control": "no-cache" } })
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url,
     status: 404,
@@ -82,7 +103,14 @@ const tempDirectoryUrl = resolveUrl("./temp/", import.meta.url)
   })
   const url = server.origin
 
-  const actual = await fetchUrl(url, { simplified: true, method: "POST" })
+  const response = await fetchUrl(url, { method: "POST" })
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url: `${url}/`,
     status: 201,

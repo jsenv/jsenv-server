@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, fetchUrl } from "@jsenv/server"
+import { startServer, fetchUrl, headersToObject } from "@jsenv/server"
 
 const { origin } = await startServer({
   logLevel: "warn",
@@ -17,13 +17,21 @@ const { origin } = await startServer({
     }
   },
 })
+
 {
   const actual = origin
   const expected = "http://localhost:8998"
   assert({ actual, expected })
 }
 {
-  const actual = await fetchUrl(origin, { simplified: true })
+  const response = await fetchUrl(origin)
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url: `http://localhost:8998/`,
     status: 200,
@@ -37,4 +45,31 @@ const { origin } = await startServer({
     body: "ok",
   }
   assert({ actual, expected })
+}
+
+// can be calld without arg, returns 501
+{
+  const server = await startServer()
+  try {
+    const response = await fetchUrl(server.origin)
+    const actual = {
+      status: response.status,
+      statusText: response.statusText,
+      headers: headersToObject(response.headers),
+      size: response.size,
+    }
+    const expected = {
+      status: 501,
+      statusText: "Not Implemented",
+      headers: {
+        "connection": "close",
+        "date": actual.headers.date,
+        "transfer-encoding": "chunked",
+      },
+      size: 0,
+    }
+    assert({ actual, expected })
+  } finally {
+    await server.stop()
+  }
 }

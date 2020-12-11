@@ -16,7 +16,6 @@ export const fetchUrl = async (
   url,
   {
     cancellationToken = createCancellationToken(),
-    simplified = false,
     ignoreHttpsError = false,
     canReadDirectory,
     contentTypeMap,
@@ -56,7 +55,7 @@ export const fetchUrl = async (
       statusText,
       headers,
     })
-    return simplified ? standardResponseToSimplifiedResponse(response) : response
+    return response
   }
 
   if (url.startsWith("data:")) {
@@ -69,7 +68,7 @@ export const fetchUrl = async (
         "content-type": mediaType,
       },
     })
-    return simplified ? standardResponseToSimplifiedResponse(response) : response
+    return response
   }
 
   // cancellation might be requested early, abortController does not support that
@@ -114,29 +113,10 @@ export const fetchUrl = async (
     throw e
   }
 
-  return simplified ? standardResponseToSimplifiedResponse(response) : response
+  return response
 }
 
 const replaceBackSlashesWithSlashes = (string) => string.replace(/\\/g, "/")
-
-const standardResponseToSimplifiedResponse = async (response) => {
-  const text = await response.text()
-  return {
-    url: response.url,
-    status: response.status,
-    statusText: response.statusText,
-    headers: responseToHeaders(response),
-    body: text,
-  }
-}
-
-const responseToHeaders = (response) => {
-  const headers = {}
-  response.headers.forEach((value, name) => {
-    headers[name] = value
-  })
-  return headers
-}
 
 const parseDataUrl = (dataUrl) => {
   const afterDataProtocol = dataUrl.slice("data:".length)

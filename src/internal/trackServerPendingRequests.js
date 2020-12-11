@@ -28,7 +28,7 @@ const trackHttp1ServerPendingRequests = (nodeServer) => {
     return Promise.all(
       Array.from(pendingClients).map(({ nodeResponse }) => {
         if (nodeResponse.headersSent === false) {
-          nodeResponse.writeHead(status, reason)
+          nodeResponse.writeHead(status, String(reason))
         }
 
         // http2

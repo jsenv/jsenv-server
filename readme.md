@@ -225,7 +225,7 @@ const noContentService = (request) => {
   return { status: 204 }
 }
 
-const okService = () => {
+const okService = (request) => {
   if (request.ressource !== "/whatever") return null
   return { status: 200 }
 }
@@ -240,7 +240,7 @@ startServer({
 > - when requested at `/`, respond with `204`
 > - when requested at `/whatever`, respond with `200`
 
-— source code at [src/firstService.js](./src/firstService.js).
+— source code at [src/service-composition.js](./src/service-composition.js).
 
 </details>
 
@@ -677,7 +677,7 @@ const noContentService = (request) => {
   return { status: 204 }
 }
 
-const okService = () => {
+const okService = (request) => {
   if (request.ressource !== "/whatever") return null
   return { status: 200 }
 }

@@ -1,6 +1,6 @@
 import { resolveDirectoryUrl, resolveUrl } from "@jsenv/util"
 import { assert } from "@jsenv/assert"
-import { startServer, serveFile, fetchUrl } from "@jsenv/server"
+import { startServer, serveFile, fetchUrl, headersToObject } from "@jsenv/server"
 
 const testDirectoryUrl = resolveUrl("./", import.meta.url)
 
@@ -14,10 +14,16 @@ const server = await startServer({
 
 const directoryUrl = resolveDirectoryUrl("./dir", testDirectoryUrl)
 const requestUrl = resolveUrl("/dir/", server.origin)
-const actual = await fetchUrl(requestUrl, {
-  simplified: true,
+const response = await fetchUrl(requestUrl, {
   headers: { accept: "text/html" },
 })
+const actual = {
+  url: response.url,
+  status: response.status,
+  statusText: response.statusText,
+  headers: headersToObject(response.headers),
+  body: await response.text(),
+}
 const expectedBody = `<!DOCTYPE html>
 <html>
   <head>

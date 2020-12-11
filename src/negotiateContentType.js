@@ -1,3 +1,5 @@
+import { parseAcceptHeader } from "./internal/header-accept.js"
+
 export const negotiateContentType = (request, availableContentTypes) => {
   const { headers = {} } = request
   const requestAcceptHeader = headers.accept
@@ -5,9 +7,11 @@ export const negotiateContentType = (request, availableContentTypes) => {
     return null
   }
 
+  const contentTypesAccepted = parseAcceptHeader(requestAcceptHeader)
+
   const availableContentTypesAcceptResults = availableContentTypes.map((availableContentType) => {
     return acceptsContentType({
-      acceptHeader: requestAcceptHeader,
+      contentTypesAccepted,
       contentType: availableContentType,
     })
   })
@@ -22,65 +26,16 @@ export const negotiateContentType = (request, availableContentTypes) => {
   return null
 }
 
-const acceptsContentType = ({ acceptHeader, contentType }) => {
-  if (typeof acceptHeader !== "string") {
-    return {
-      accepted: false,
-      score: -1,
-    }
-  }
-
-  const acceptResults = acceptHeader.split(",").map((acceptRaw) => {
-    const accept = parseAccept(acceptRaw)
-    const accepted = typeMatches(contentType, accept.type)
+const acceptsContentType = ({ contentTypesAccepted, contentType }) => {
+  const acceptResults = contentTypesAccepted.map((contentTypeAccepted) => {
+    const accepted = typeMatches(contentType, contentTypeAccepted.type)
     return {
       accepted,
-      score: accept.score,
+      score: contentTypeAccepted.quality,
     }
   })
 
   return getBestAcceptResult(acceptResults)
-}
-
-const getBestAcceptResult = (acceptResults) => {
-  const bestAcceptsResult = acceptResults.reduce(
-    (previous, acceptResult) => {
-      if (!acceptResult.accepted) {
-        return previous
-      }
-      if (previous.score >= acceptResult.score) {
-        return previous
-      }
-      return acceptResult
-    },
-    {
-      accepted: false,
-      score: -1,
-    },
-  )
-  return bestAcceptsResult
-}
-
-const parseAccept = (accept) => {
-  const acceptTrimmed = accept.trim()
-  const scoreIndex = acceptTrimmed.indexOf(";q=")
-
-  let type
-  let score
-  if (scoreIndex > -1) {
-    const beforeScore = acceptTrimmed.slice(0, scoreIndex)
-    const afterScore = acceptTrimmed.slice(scoreIndex + ";q=".length)
-    type = beforeScore
-    score = parseFloat(afterScore)
-  } else {
-    type = acceptTrimmed
-    score = 1
-  }
-
-  return {
-    type,
-    score,
-  }
 }
 
 const typeMatches = (type, pattern) => {
@@ -103,4 +58,23 @@ const decomposeType = (fullType) => {
   const type = parts[0]
   const subtype = parts[1]
   return { type, subtype }
+}
+
+const getBestAcceptResult = (acceptResults) => {
+  const bestAcceptsResult = acceptResults.reduce(
+    (previous, acceptResult) => {
+      if (!acceptResult.accepted) {
+        return previous
+      }
+      if (previous.score >= acceptResult.score) {
+        return previous
+      }
+      return acceptResult
+    },
+    {
+      accepted: false,
+      score: -1,
+    },
+  )
+  return bestAcceptsResult
 }

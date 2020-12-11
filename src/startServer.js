@@ -12,10 +12,9 @@ import {
   executeAsyncFunction,
 } from "@jsenv/cancellation"
 import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
-import { memoize } from "@jsenv/util"
+import { memoize, urlToOrigin } from "@jsenv/util"
 import { createLogger } from "@jsenv/logger"
 import { createTracker } from "./internal/createTracker.js"
-import { urlToOrigin } from "./internal/urlToOrigin.js"
 import { createServer } from "./internal/createServer.js"
 import { trackServerPendingConnections } from "./internal/trackServerPendingConnections.js"
 import { trackServerPendingRequests } from "./internal/trackServerPendingRequests.js"
@@ -336,6 +335,12 @@ ${requestAcceptHeader}`)
         return
       }
 
+      if (error && isCancelError(error) && request.cancellationToken.cancellationRequested) {
+        logger.info("ignored because request canceled")
+        nodeResponse.destroy()
+        return
+      }
+
       if (request.aborted) {
         logger.info(`request aborted by client`)
         nodeResponse.destroy()
@@ -347,10 +352,8 @@ ${requestAcceptHeader}`)
         response.headers["content-length"] > 0 &&
         response.body === ""
       ) {
-        logger.error(
-          createContentLengthMismatchError(
-            `content-length header is ${response.headers["content-length"]} but body is empty`,
-          ),
+        logger.warn(
+          `content-length header is ${response.headers["content-length"]} but body is empty`,
         )
       }
 
@@ -494,13 +497,6 @@ ${request.method} ${request.origin}${request.ressource}`)
 }
 
 const statusToStatusText = (status) => STATUS_CODES[status] || "not specified"
-
-const createContentLengthMismatchError = (message) => {
-  const error = new Error(message)
-  error.code = "CONTENT_LENGTH_MISMATCH"
-  error.name = error.code
-  return error
-}
 
 // https://www.w3.org/TR/cors/
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
