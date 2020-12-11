@@ -240,7 +240,7 @@ startServer({
 > - when requested at `/`, respond with `204`
 > - when requested at `/whatever`, respond with `200`
 
-— source code at [src/firstService.js](./src/firstService.js).
+— source code at [src/service-composition.js](./src/service-composition.js).
 
 </details>
 
