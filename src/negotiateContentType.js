@@ -12,9 +12,7 @@ export const negotiateContentType = (request, availableContentTypes) => {
   return applyContentNegotiation({
     accepteds: contentTypesAccepted,
     availables: availableContentTypes,
-    acceptablePredicate: (accepted, availableContentType) => {
-      return acceptableContentTypePredicate(availableContentType, accepted.type)
-    },
+    getAcceptanceScore: getContentTypeAcceptanceScore,
   })
 }
 
@@ -29,9 +27,9 @@ const parseAcceptHeader = (acceptHeader) => {
   const accepts = []
   Object.keys(acceptHeaderObject).forEach((key) => {
     const { q = 1 } = acceptHeaderObject[key]
-    const type = key
+    const value = key
     accepts.push({
-      type,
+      value,
       quality: q,
     })
   })
@@ -41,30 +39,20 @@ const parseAcceptHeader = (acceptHeader) => {
   return accepts
 }
 
-const acceptableContentTypePredicate = (type, pattern) => {
-  const typeComposition = decomposeType(type)
-  const patternComposition = decomposeType(pattern)
+const getContentTypeAcceptanceScore = ({ value, quality }, availableContentType) => {
+  const [acceptedType, acceptedSubtype] = decomposeContentType(value)
+  const [availableType, availableSubtype] = decomposeContentType(availableContentType)
 
-  if (patternComposition.type === "*") {
-    if (patternComposition.subtype === "*") {
-      return true
-    }
-    return patternComposition.subtype === typeComposition.subtype
+  const typeAccepted = acceptedType === "*" || acceptedType === availableType
+  const subtypeAccepted = acceptedSubtype === "*" || acceptedSubtype === availableSubtype
+
+  if (typeAccepted && subtypeAccepted) {
+    return quality
   }
-
-  if (patternComposition.type === typeComposition.type) {
-    if (patternComposition.subtype === "*") {
-      return true
-    }
-    return patternComposition.subtype === typeComposition.subtype
-  }
-
-  return false
+  return -1
 }
 
-const decomposeType = (fullType) => {
-  const parts = fullType.split("/")
-  const type = parts[0]
-  const subtype = parts[1]
-  return { type, subtype }
+const decomposeContentType = (fullType) => {
+  const [type, subtype] = fullType.split("/")
+  return [type, subtype]
 }

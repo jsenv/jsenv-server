@@ -1,6 +1,6 @@
-export const applyContentNegotiation = ({ availables, accepteds, acceptablePredicate }) => {
-  let highestQuality = -1
-  let availableWithHighestQuality = null
+export const applyContentNegotiation = ({ availables, accepteds, getAcceptanceScore }) => {
+  let highestScore = -1
+  let availableWithHighestScore = null
 
   let availableIndex = 0
   while (availableIndex < availables.length) {
@@ -12,16 +12,13 @@ export const applyContentNegotiation = ({ availables, accepteds, acceptablePredi
       const accepted = accepteds[acceptedIndex]
       acceptedIndex++
 
-      const acceptable = acceptablePredicate(accepted, available)
-      if (acceptable) {
-        const quality = accepted.quality
-        if (quality > highestQuality) {
-          availableWithHighestQuality = available
-          highestQuality = quality
-        }
+      const score = getAcceptanceScore(accepted, available)
+      if (score > highestScore) {
+        availableWithHighestScore = available
+        highestScore = score
       }
     }
   }
 
-  return availableWithHighestQuality
+  return availableWithHighestScore
 }

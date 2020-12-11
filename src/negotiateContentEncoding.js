@@ -12,9 +12,7 @@ export const negotiateContentEncoding = (request, availableEncodings) => {
   return applyContentNegotiation({
     accepteds: encodingsAccepted,
     availables: availableEncodings,
-    acceptablePredicate: (accepted, availableEncoding) => {
-      return acceptableEncodingPredicate(availableEncoding, accepted.encoding)
-    },
+    getAcceptanceScore: getEncodingAcceptanceScore,
   })
 }
 
@@ -29,9 +27,9 @@ const parseAcceptEncodingHeader = (acceptEncodingHeaderString) => {
   const encodingsAccepted = []
   Object.keys(acceptEncodingHeader).forEach((key) => {
     const { q = 1 } = acceptEncodingHeader[key]
-    const encoding = key
+    const value = key
     encodingsAccepted.push({
-      encoding,
+      value,
       quality: q,
     })
   })
@@ -41,17 +39,18 @@ const parseAcceptEncodingHeader = (acceptEncodingHeaderString) => {
   return encodingsAccepted
 }
 
-const acceptableEncodingPredicate = (encoding, pattern) => {
-  if (pattern === "*") {
-    return true
+const getEncodingAcceptanceScore = ({ value, quality }, availableEncoding) => {
+  if (value === "*") {
+    return quality
   }
 
   // normalize br to brotli
-  if (pattern === "br") pattern = "brotli"
-  if (encoding === "br") encoding = "brotli"
+  if (value === "br") value = "brotli"
+  if (availableEncoding === "br") availableEncoding = "brotli"
 
-  if (pattern === encoding) {
-    return true
+  if (value === availableEncoding) {
+    return quality
   }
-  return false
+
+  return -1
 }
