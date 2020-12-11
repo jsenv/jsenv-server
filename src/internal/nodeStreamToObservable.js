@@ -1,3 +1,5 @@
+// https://github.com/jamestalmage/stream-to-observable/blob/master/index.js
+
 import { createObservable } from "./observable.js"
 
 export const nodeStreamToObservable = (nodeStream) => {

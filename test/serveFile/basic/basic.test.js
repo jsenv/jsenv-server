@@ -1,6 +1,5 @@
 import {
   resolveUrl,
-  readFile,
   bufferToEtag,
   urlToFileSystemPath,
   ensureEmptyDirectory,
@@ -17,20 +16,20 @@ const fixturesDirectoryUrl = resolveUrl("./fixtures/", import.meta.url)
 {
   await ensureEmptyDirectory(fixturesDirectoryUrl)
   const fileUrl = resolveUrl("./file.js", fixturesDirectoryUrl)
-  await writeFile(fileUrl, `const a = true`)
+  const fileBuffer = Buffer.from(`const a = true`)
+  await writeFile(fileUrl, fileBuffer)
 
   const request = { method: "GET", ressource: "/file.js?ok=true" }
   const actual = await serveFile(request, {
     rootDirectoryUrl: fixturesDirectoryUrl,
   })
-  const sourceBuffer = await readFile(fileUrl, { as: "buffer" })
   const expected = {
     status: 200,
     statusText: undefined,
     headers: {
       "cache-control": "no-store",
       "content-type": "application/javascript",
-      "content-length": sourceBuffer.length,
+      "content-length": fileBuffer.length,
     },
     body: actual.body,
     bodyEncoding: undefined,
