@@ -2,18 +2,20 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
+var logger = require('@jsenv/logger');
 var module$1 = require('module');
 var https = require('https');
+var cancellation = require('@jsenv/cancellation');
+var util = require('@jsenv/util');
 var fs = require('fs');
-var url$1 = require('url');
-var crypto = require('crypto');
-var path = require('path');
-var util = require('util');
 var perf_hooks = require('perf_hooks');
+var path = require('path');
 var net = require('net');
 var http = require('http');
+var nodeSignals = require('@jsenv/node-signals');
 var stream = require('stream');
 var os = require('os');
+var url$1 = require('url');
 
 function _interopNamespace(e) {
   if (e && e.__esModule) return e;
@@ -34,66 +36,6 @@ function _interopNamespace(e) {
   n['default'] = e;
   return Object.freeze(n);
 }
-
-const acceptsContentType = (acceptHeader, contentType) => {
-  if (typeof acceptHeader !== "string") {
-    return false;
-  }
-
-  return acceptHeader.split(",").some(acceptRaw => {
-    const accept = parseAccept(acceptRaw);
-    return typeMatches(contentType, accept.type);
-  });
-};
-
-const parseAccept = accept => {
-  const acceptTrimmed = accept.trim();
-  const scoreIndex = acceptTrimmed.indexOf(";q=");
-  let type;
-  let score;
-
-  if (scoreIndex > -1) {
-    const beforeScore = acceptTrimmed.slice(0, scoreIndex);
-    const afterScore = acceptTrimmed.slice(scoreIndex + ";q=".length);
-    type = beforeScore;
-    score = parseFloat(afterScore);
-  } else {
-    type = acceptTrimmed;
-    score = 1;
-  }
-
-  return {
-    type,
-    score
-  };
-};
-
-const typeMatches = (type, pattern) => {
-  const typeComposition = decomposeType(type);
-  const patternComposition = decomposeType(pattern);
-
-  if (patternComposition.type === "*") {
-    if (patternComposition.subtype === "*") return true;
-    return patternComposition.subtype === typeComposition.subtype;
-  }
-
-  if (patternComposition.type === typeComposition.type) {
-    if (patternComposition.subtype === "*") return true;
-    return patternComposition.subtype === typeComposition.subtype;
-  }
-
-  return false;
-};
-
-const decomposeType = fullType => {
-  const parts = fullType.split("/");
-  const type = parts[0];
-  const subtype = parts[1];
-  return {
-    type,
-    subtype
-  };
-};
 
 const compositionMappingToComposeStrict = (compositionMapping, createInitial = () => ({})) => {
   const reducer = compositionMappingToStrictReducer(compositionMapping);
@@ -120,12 +62,20 @@ const compositionMappingToStrictReducer = compositionMapping => {
   };
 };
 
-const compositionMappingToCompose = (compositionMapping, createInitial = () => ({})) => {
-  const reducer = compositionMappingToReducer(compositionMapping);
+const compositionMappingToCompose = (compositionMapping, createInitial = () => {
+  return {};
+}, {
+  lowercase = false
+} = {}) => {
+  const reducer = compositionMappingToReducer(compositionMapping, {
+    lowercase
+  });
   return (...objects) => objects.reduce(reducer, createInitial());
 };
 
-const compositionMappingToReducer = compositionMapping => {
+const compositionMappingToReducer = (compositionMapping, {
+  lowercase
+}) => {
   const composeProperty = (key, previous, current) => {
     const propertyExistInCurrent = (key in current);
     if (!propertyExistInCurrent) return previous[key];
@@ -139,9 +89,13 @@ const compositionMappingToReducer = compositionMapping => {
 
   return (previous, current) => {
     if (typeof current !== "object" || current === null) return previous;
-    const composed = { ...previous
-    };
+    const composed = {};
+    Object.keys(previous).forEach(key => {
+      if (lowercase) key = key.toLowerCase();
+      composed[key] = previous[key];
+    });
     Object.keys(current).forEach(key => {
+      if (lowercase) key = key.toLowerCase();
       composed[key] = composeProperty(key, previous, current);
     });
     return composed;
@@ -171,7 +125,9 @@ const headerCompositionMapping = {
   // 'content-type', // https://github.com/ninenines/cowboy/issues/1230
   "vary": composeHeaderValues
 };
-const composeResponseHeaders = compositionMappingToCompose(headerCompositionMapping);
+const composeResponseHeaders = compositionMappingToCompose(headerCompositionMapping, () => ({}), {
+  lowercase: true
+});
 
 const responseCompositionMapping = {
   status: (prevStatus, status) => status,
@@ -249,86 +205,6 @@ const isErrorWithCode = (error, code) => {
   return typeof error === "object" && error.code === code;
 };
 
-const LOG_LEVEL_OFF = "off";
-const LOG_LEVEL_DEBUG = "debug";
-const LOG_LEVEL_INFO = "info";
-const LOG_LEVEL_WARN = "warn";
-const LOG_LEVEL_ERROR = "error";
-
-const createLogger = ({
-  logLevel = LOG_LEVEL_INFO
-} = {}) => {
-  if (logLevel === LOG_LEVEL_DEBUG) {
-    return {
-      debug,
-      info,
-      warn,
-      error
-    };
-  }
-
-  if (logLevel === LOG_LEVEL_INFO) {
-    return {
-      debug: debugDisabled,
-      info,
-      warn,
-      error
-    };
-  }
-
-  if (logLevel === LOG_LEVEL_WARN) {
-    return {
-      debug: debugDisabled,
-      info: infoDisabled,
-      warn,
-      error
-    };
-  }
-
-  if (logLevel === LOG_LEVEL_ERROR) {
-    return {
-      debug: debugDisabled,
-      info: infoDisabled,
-      warn: warnDisabled,
-      error
-    };
-  }
-
-  if (logLevel === LOG_LEVEL_OFF) {
-    return {
-      debug: debugDisabled,
-      info: infoDisabled,
-      warn: warnDisabled,
-      error: errorDisabled
-    };
-  }
-
-  throw new Error(`unexpected logLevel.
---- logLevel ---
-${logLevel}
---- allowed log levels ---
-${LOG_LEVEL_OFF}
-${LOG_LEVEL_ERROR}
-${LOG_LEVEL_WARN}
-${LOG_LEVEL_INFO}
-${LOG_LEVEL_DEBUG}`);
-};
-const debug = console.debug;
-
-const debugDisabled = () => {};
-
-const info = console.info;
-
-const infoDisabled = () => {};
-
-const warn = console.warn;
-
-const warnDisabled = () => {};
-
-const error = console.error;
-
-const errorDisabled = () => {};
-
 if ("observable" in Symbol === false) {
   Symbol.observable = Symbol.for("observable");
 }
@@ -371,6 +247,8 @@ const isObservable = value => {
 
 const createSSERoom = ({
   logLevel,
+  // do not keep process alive because of rooms, something else must keep it alive
+  keepProcessAlive = false,
   keepaliveDuration = 30 * 1000,
   retryDuration = 1 * 1000,
   historyLength = 1 * 1000,
@@ -380,7 +258,7 @@ const createSSERoom = ({
   welcomeEvent = false,
   welcomeEventPublic = false
 } = {}) => {
-  const logger = createLogger({
+  const logger$1 = logger.createLogger({
     logLevel
   });
   const connections = new Set();
@@ -403,7 +281,7 @@ const createSSERoom = ({
   };
 
   const connect = lastKnownId => {
-    if (connections.size > maxConnectionAllowed) {
+    if (connections.size >= maxConnectionAllowed) {
       return {
         status: 503
       };
@@ -434,7 +312,7 @@ const createSSERoom = ({
         next
       }) => {
         events.forEach(event => {
-          logger.debug(`send ${event.type} event to this new client`);
+          logger$1.debug(`send ${event.type} event to this new client`);
           next(stringifySourceEvent(event));
         });
         const connection = {
@@ -442,8 +320,10 @@ const createSSERoom = ({
         };
 
         const unsubscribe = () => {
-          connections.delete(connection);
-          logger.debug(`connection closed by us, number of client connected to event source: ${connections.size}`);
+          if (connections.has(connection)) {
+            connections.delete(connection);
+            logger$1.debug(`connection closed by us, number of client connected to event source: ${connections.size}`);
+          }
         };
 
         connection.unsubscribe = unsubscribe;
@@ -453,7 +333,7 @@ const createSSERoom = ({
         };
       }
     });
-    logger.debug(`client joined, number of client connected to event source: ${connections.size}, max allowed: ${maxConnectionAllowed}`);
+    logger$1.debug(`client joined, number of client connected to event source: ${connections.size}, max allowed: ${maxConnectionAllowed}`);
     return {
       status: 200,
       headers: {
@@ -473,7 +353,7 @@ const createSSERoom = ({
 
   const sendEvent = event => {
     if (event.type !== "comment") {
-      logger.debug(`send ${event.type} event, number of client listening event source: ${connections.size}`);
+      logger$1.debug(`send ${event.type} event, number of client listening event source: ${connections.size}`);
 
       if (typeof event.id === "undefined") {
         event.id = computeEventId(event, previousEventId);
@@ -488,7 +368,7 @@ const createSSERoom = ({
 
   const keepAlive = () => {
     // maybe that, when an event occurs, we can delay the keep alive event
-    logger.debug(`send keep alive event, number of client listening event source: ${connections.size}`);
+    logger$1.debug(`send keep alive event, number of client listening event source: ${connections.size}`);
     sendEvent({
       type: "comment",
       data: new Date().toLocaleTimeString()
@@ -498,10 +378,14 @@ const createSSERoom = ({
   const start = () => {
     state = "started";
     interval = setInterval(keepAlive, keepaliveDuration);
+
+    if (!keepProcessAlive) {
+      interval.unref();
+    }
   };
 
   const stop = () => {
-    logger.debug(`stopping, number of client to close: ${connections.size}`);
+    logger$1.debug(`stopping, number of client to close: ${connections.size}`);
     connections.forEach(connection => connection.unsubscribe());
     clearInterval(interval);
     eventHistory.reset();
@@ -513,7 +397,8 @@ const createSSERoom = ({
     stop,
     connect,
     eventsSince,
-    sendEvent
+    sendEvent,
+    clientCountGetter: () => connections.size
   };
 }; // https://github.com/dmail-old/project/commit/da7d2c88fc8273850812972885d030a22f9d7448
 // https://github.com/dmail-old/project/commit/98b3ae6748d461ac4bd9c48944a551b1128f4459
@@ -571,972 +456,245 @@ const createEventHistory = limit => {
   };
 };
 
-/* global require, __filename */
-const nodeRequire = require;
+/* global __filename */
 const filenameContainsBackSlashes = __filename.indexOf("\\") > -1;
 const url = filenameContainsBackSlashes ? `file:///${__filename.replace(/\\/g, "/")}` : `file://${__filename}`;
 
-const createCancellationToken = () => {
-  const register = callback => {
-    if (typeof callback !== "function") {
-      throw new Error(`callback must be a function, got ${callback}`);
-    }
-
-    return {
-      callback,
-      unregister: () => {}
-    };
-  };
-
-  const throwIfRequested = () => undefined;
-
-  return {
-    register,
-    cancellationRequested: false,
-    throwIfRequested
-  };
-};
-
-const memoizeOnce = compute => {
-  let locked = false;
-  let lockValue;
-
-  const memoized = (...args) => {
-    if (locked) return lockValue; // if compute is recursive wait for it to be fully done before storing the lockValue
-    // so set locked later
-
-    lockValue = compute(...args);
-    locked = true;
-    return lockValue;
-  };
-
-  memoized.deleteCache = () => {
-    const value = lockValue;
-    locked = false;
-    lockValue = undefined;
-    return value;
-  };
-
-  return memoized;
-};
-
-const createOperation = ({
-  cancellationToken = createCancellationToken(),
-  start,
-  ...rest
+const applyContentNegotiation = ({
+  availables,
+  accepteds,
+  getAcceptanceScore
 }) => {
-  const unknownArgumentNames = Object.keys(rest);
+  let highestScore = -1;
+  let availableWithHighestScore = null;
+  let availableIndex = 0;
 
-  if (unknownArgumentNames.length) {
-    throw new Error(`createOperation called with unknown argument names.
---- unknown argument names ---
-${unknownArgumentNames}
---- possible argument names ---
-cancellationToken
-start`);
-  }
+  while (availableIndex < availables.length) {
+    const available = availables[availableIndex];
+    availableIndex++;
+    let acceptedIndex = 0;
 
-  cancellationToken.throwIfRequested();
-  const promise = new Promise(resolve => {
-    resolve(start());
-  });
-  const cancelPromise = new Promise((resolve, reject) => {
-    const cancelRegistration = cancellationToken.register(cancelError => {
-      cancelRegistration.unregister();
-      reject(cancelError);
-    });
-    promise.then(cancelRegistration.unregister, () => {});
-  });
-  const operationPromise = Promise.race([promise, cancelPromise]);
-  return operationPromise;
-};
+    while (acceptedIndex < accepteds.length) {
+      const accepted = accepteds[acceptedIndex];
+      acceptedIndex++;
+      const score = getAcceptanceScore(accepted, available);
 
-const createStoppableOperation = ({
-  cancellationToken = createCancellationToken(),
-  start,
-  stop,
-  ...rest
-}) => {
-  if (typeof stop !== "function") {
-    throw new TypeError(`stop must be a function. got ${stop}`);
-  }
-
-  const unknownArgumentNames = Object.keys(rest);
-
-  if (unknownArgumentNames.length) {
-    throw new Error(`createStoppableOperation called with unknown argument names.
---- unknown argument names ---
-${unknownArgumentNames}
---- possible argument names ---
-cancellationToken
-start
-stop`);
-  }
-
-  cancellationToken.throwIfRequested();
-  const promise = new Promise(resolve => {
-    resolve(start());
-  });
-  const cancelPromise = new Promise((resolve, reject) => {
-    const cancelRegistration = cancellationToken.register(cancelError => {
-      cancelRegistration.unregister();
-      reject(cancelError);
-    });
-    promise.then(cancelRegistration.unregister, () => {});
-  });
-  const operationPromise = Promise.race([promise, cancelPromise]);
-  const stopInternal = memoizeOnce(async reason => {
-    const value = await promise;
-    return stop(value, reason);
-  });
-  cancellationToken.register(stopInternal);
-  operationPromise.stop = stopInternal;
-  return operationPromise;
-};
-
-const firstOperationMatching = ({
-  array,
-  start,
-  predicate
-}) => {
-  if (typeof array !== "object") {
-    throw new TypeError(`array must be an object, got ${array}`);
-  }
-
-  if (typeof start !== "function") {
-    throw new TypeError(`start must be a function, got ${start}`);
-  }
-
-  if (typeof predicate !== "function") {
-    throw new TypeError(`predicate must be a function, got ${predicate}`);
-  }
-
-  const visit = async index => {
-    if (index >= array.length) {
-      return undefined;
-    }
-
-    const input = array[index];
-    const output = await start(input);
-
-    if (predicate(output)) {
-      return output;
-    }
-
-    return visit(index + 1);
-  };
-
-  return visit(0);
-};
-
-const createCancelError = reason => {
-  const cancelError = new Error(`canceled because ${reason}`);
-  cancelError.name = "CANCEL_ERROR";
-  cancelError.reason = reason;
-  return cancelError;
-};
-const isCancelError = value => {
-  return value && typeof value === "object" && value.name === "CANCEL_ERROR";
-};
-
-const composeCancellationToken = (...tokens) => {
-  const register = callback => {
-    if (typeof callback !== "function") {
-      throw new Error(`callback must be a function, got ${callback}`);
-    }
-
-    const registrationArray = [];
-
-    const visit = i => {
-      const token = tokens[i];
-      const registration = token.register(callback);
-      registrationArray.push(registration);
-    };
-
-    let i = 0;
-
-    while (i < tokens.length) {
-      visit(i++);
-    }
-
-    const compositeRegistration = {
-      callback,
-      unregister: () => {
-        registrationArray.forEach(registration => registration.unregister());
-        registrationArray.length = 0;
+      if (score > highestScore) {
+        availableWithHighestScore = available;
+        highestScore = score;
       }
-    };
-    return compositeRegistration;
-  };
-
-  let requested = false;
-  let cancelError;
-  const internalRegistration = register(parentCancelError => {
-    requested = true;
-    cancelError = parentCancelError;
-    internalRegistration.unregister();
-  });
-
-  const throwIfRequested = () => {
-    if (requested) {
-      throw cancelError;
     }
-  };
-
-  return {
-    register,
-
-    get cancellationRequested() {
-      return requested;
-    },
-
-    throwIfRequested
-  };
-};
-
-const arrayWithout = (array, item) => {
-  const arrayWithoutItem = [];
-  let i = 0;
-
-  while (i < array.length) {
-    const value = array[i];
-    i++;
-
-    if (value === item) {
-      continue;
-    }
-
-    arrayWithoutItem.push(value);
   }
 
-  return arrayWithoutItem;
+  return availableWithHighestScore;
 };
 
-// https://github.com/tc39/proposal-cancellation/tree/master/stage0
-const createCancellationSource = () => {
-  let requested = false;
-  let cancelError;
-  let registrationArray = [];
+/**
 
-  const cancel = reason => {
-    if (requested) return;
-    requested = true;
-    cancelError = createCancelError(reason);
-    const registrationArrayCopy = registrationArray.slice();
-    registrationArray.length = 0;
-    registrationArrayCopy.forEach(registration => {
-      registration.callback(cancelError); // const removedDuringCall = registrationArray.indexOf(registration) === -1
-    });
-  };
+ A multiple header is a header with multiple values like
 
-  const register = callback => {
-    if (typeof callback !== "function") {
-      throw new Error(`callback must be a function, got ${callback}`);
-    }
+ "text/plain, application/json;q=0.1"
 
-    const existingRegistration = registrationArray.find(registration => {
-      return registration.callback === callback;
-    }); // don't register twice
+ Each, means it's a new value (it's optionally followed by a space)
 
-    if (existingRegistration) {
-      return existingRegistration;
-    }
-
-    const registration = {
-      callback,
-      unregister: () => {
-        registrationArray = arrayWithout(registrationArray, registration);
-      }
-    };
-    registrationArray = [registration, ...registrationArray];
-    return registration;
-  };
-
-  const throwIfRequested = () => {
-    if (requested) {
-      throw cancelError;
-    }
-  };
-
-  return {
-    token: {
-      register,
-
-      get cancellationRequested() {
-        return requested;
-      },
-
-      throwIfRequested
-    },
-    cancel
-  };
-};
-
-const addCallback = callback => {
-  const triggerHangUpOrDeath = () => callback(); // SIGHUP http://man7.org/linux/man-pages/man7/signal.7.html
-
-
-  process.once("SIGUP", triggerHangUpOrDeath);
-  return () => {
-    process.removeListener("SIGUP", triggerHangUpOrDeath);
-  };
-};
-
-const SIGUPSignal = {
-  addCallback
-};
-
-const addCallback$1 = callback => {
-  // SIGINT is CTRL+C from keyboard also refered as keyboard interruption
-  // http://man7.org/linux/man-pages/man7/signal.7.html
-  // may also be sent by vscode https://github.com/Microsoft/vscode-node-debug/issues/1#issuecomment-405185642
-  process.once("SIGINT", callback);
-  return () => {
-    process.removeListener("SIGINT", callback);
-  };
-};
-
-const SIGINTSignal = {
-  addCallback: addCallback$1
-};
-
-const addCallback$2 = callback => {
-  if (process.platform === "win32") {
-    console.warn(`SIGTERM is not supported on windows`);
-    return () => {};
-  }
-
-  const triggerTermination = () => callback(); // SIGTERM http://man7.org/linux/man-pages/man7/signal.7.html
-
-
-  process.once("SIGTERM", triggerTermination);
-  return () => {
-    process.removeListener("SIGTERM", triggerTermination);
-  };
-};
-
-const SIGTERMSignal = {
-  addCallback: addCallback$2
-};
-
-let beforeExitCallbackArray = [];
-let uninstall;
-
-const addCallback$3 = callback => {
-  if (beforeExitCallbackArray.length === 0) uninstall = install();
-  beforeExitCallbackArray = [...beforeExitCallbackArray, callback];
-  return () => {
-    if (beforeExitCallbackArray.length === 0) return;
-    beforeExitCallbackArray = beforeExitCallbackArray.filter(beforeExitCallback => beforeExitCallback !== callback);
-    if (beforeExitCallbackArray.length === 0) uninstall();
-  };
-};
-
-const install = () => {
-  const onBeforeExit = () => {
-    return beforeExitCallbackArray.reduce(async (previous, callback) => {
-      await previous;
-      return callback();
-    }, Promise.resolve());
-  };
-
-  process.once("beforeExit", onBeforeExit);
-  return () => {
-    process.removeListener("beforeExit", onBeforeExit);
-  };
-};
-
-const beforeExitSignal = {
-  addCallback: addCallback$3
-};
-
-const addCallback$4 = (callback, {
-  collectExceptions = false
+ Each; mean it's a property followed by =
+ if "" is a string
+ if not it's likely a number
+ */
+const parseMultipleHeader = (multipleHeaderString, {
+  validateName = () => true,
+  validateProperty = () => true
 } = {}) => {
-  if (!collectExceptions) {
-    const exitCallback = () => {
-      callback();
-    };
+  const values = multipleHeaderString.split(",");
+  const multipleHeader = {};
+  values.forEach(value => {
+    const valueTrimmed = value.trim();
+    const valueParts = valueTrimmed.split(";");
+    const name = valueParts[0];
+    const nameValidation = validateName(name);
 
-    process.on("exit", exitCallback);
-    return () => {
-      process.removeListener("exit", exitCallback);
+    if (!nameValidation) {
+      return;
+    }
+
+    const properties = parseHeaderProperties(valueParts.slice(1), {
+      validateProperty
+    });
+    multipleHeader[name] = properties;
+  });
+  return multipleHeader;
+};
+
+const parseHeaderProperties = (headerProperties, {
+  validateProperty
+}) => {
+  const properties = headerProperties.reduce((previous, valuePart) => {
+    const [propertyName, propertyValueString] = valuePart.split("=");
+    const propertyValue = parseHeaderPropertyValue(propertyValueString);
+    const property = {
+      name: propertyName,
+      value: propertyValue
     };
+    const propertyValidation = validateProperty(property);
+
+    if (!propertyValidation) {
+      return previous;
+    }
+
+    return { ...previous,
+      [property.name]: property.value
+    };
+  }, {});
+  return properties;
+};
+
+const parseHeaderPropertyValue = headerPropertyValueString => {
+  const firstChar = headerPropertyValueString[0];
+  const lastChar = headerPropertyValueString[headerPropertyValueString.length - 1];
+
+  if (firstChar === '"' && lastChar === '"') {
+    return headerPropertyValueString.slice(1, -1);
   }
 
+  if (isNaN(headerPropertyValueString)) {
+    return headerPropertyValueString;
+  }
+
+  return parseFloat(headerPropertyValueString);
+};
+
+const stringifyMultipleHeader = (multipleHeader, {
+  validateName = () => true,
+  validateProperty = () => true
+} = {}) => {
+  return Object.keys(multipleHeader).filter(name => {
+    const headerProperties = multipleHeader[name];
+
+    if (!headerProperties) {
+      return false;
+    }
+
+    if (typeof headerProperties !== "object") {
+      return false;
+    }
+
+    const nameValidation = validateName(name);
+
+    if (!nameValidation) {
+      return false;
+    }
+
+    return true;
+  }).map(name => {
+    const headerProperties = multipleHeader[name];
+    const headerPropertiesString = stringifyHeaderProperties(headerProperties, {
+      validateProperty
+    });
+
+    if (headerPropertiesString.length) {
+      return `${name};${headerPropertiesString}`;
+    }
+
+    return name;
+  }).join(", ");
+};
+
+const stringifyHeaderProperties = (headerProperties, {
+  validateProperty
+}) => {
+  const headerPropertiesString = Object.keys(headerProperties).map(name => {
+    const property = {
+      name,
+      value: headerProperties[name]
+    };
+    return property;
+  }).filter(property => {
+    const propertyValidation = validateProperty(property);
+
+    if (!propertyValidation) {
+      return false;
+    }
+
+    return true;
+  }).map(stringifyHeaderProperty).join(";");
+  return headerPropertiesString;
+};
+
+const stringifyHeaderProperty = ({
+  name,
+  value
+}) => {
+  if (typeof value === "string") {
+    return `${name}="${value}"`;
+  }
+
+  return `${name}=${value}`;
+};
+
+const negotiateContentType = (request, availableContentTypes) => {
   const {
-    getExceptions,
-    stop
-  } = trackExceptions();
+    headers = {}
+  } = request;
+  const requestAcceptHeader = headers.accept;
 
-  const exitCallback = () => {
-    process.removeListener("exit", exitCallback);
-    stop();
-    callback({
-      exceptionArray: getExceptions().map(({
-        exception,
-        origin
-      }) => {
-        return {
-          exception,
-          origin
-        };
-      })
-    });
-  };
+  if (!requestAcceptHeader) {
+    return null;
+  }
 
-  process.on("exit", exitCallback);
-  return () => {
-    process.removeListener("exit", exitCallback);
-  };
-};
-
-const trackExceptions = () => {
-  let exceptionArray = [];
-
-  const unhandledRejectionCallback = (unhandledRejection, promise) => {
-    exceptionArray = [...exceptionArray, {
-      origin: "unhandledRejection",
-      exception: unhandledRejection,
-      promise
-    }];
-  };
-
-  const rejectionHandledCallback = promise => {
-    exceptionArray = exceptionArray.filter(exceptionArray => exceptionArray.promise !== promise);
-  };
-
-  const uncaughtExceptionCallback = (uncaughtException, origin) => {
-    // since node 12.4 https://nodejs.org/docs/latest-v12.x/api/process.html#process_event_uncaughtexception
-    if (origin === "unhandledRejection") return;
-    exceptionArray = [...exceptionArray, {
-      origin: "uncaughtException",
-      exception: uncaughtException
-    }];
-  };
-
-  process.on("unhandledRejection", unhandledRejectionCallback);
-  process.on("rejectionHandled", rejectionHandledCallback);
-  process.on("uncaughtException", uncaughtExceptionCallback);
-  return {
-    getExceptions: () => exceptionArray,
-    stop: () => {
-      process.removeListener("unhandledRejection", unhandledRejectionCallback);
-      process.removeListener("rejectionHandled", rejectionHandledCallback);
-      process.removeListener("uncaughtException", uncaughtExceptionCallback);
-    }
-  };
-};
-
-const exitSignal = {
-  addCallback: addCallback$4
-};
-
-const addCallback$5 = callback => {
-  return eventRace({
-    SIGHUP: {
-      register: SIGUPSignal.addCallback,
-      callback: () => callback("SIGHUP")
-    },
-    SIGINT: {
-      register: SIGINTSignal.addCallback,
-      callback: () => callback("SIGINT")
-    },
-    ...(process.platform === "win32" ? {} : {
-      SIGTERM: {
-        register: SIGTERMSignal.addCallback,
-        callback: () => callback("SIGTERM")
-      }
-    }),
-    beforeExit: {
-      register: beforeExitSignal.addCallback,
-      callback: () => callback("beforeExit")
-    },
-    exit: {
-      register: exitSignal.addCallback,
-      callback: () => callback("exit")
-    }
+  const contentTypesAccepted = parseAcceptHeader(requestAcceptHeader);
+  return applyContentNegotiation({
+    accepteds: contentTypesAccepted,
+    availables: availableContentTypes,
+    getAcceptanceScore: getContentTypeAcceptanceScore
   });
 };
 
-const eventRace = eventMap => {
-  const unregisterMap = {};
-
-  const unregisterAll = reason => {
-    return Object.keys(unregisterMap).map(name => unregisterMap[name](reason));
-  };
-
-  Object.keys(eventMap).forEach(name => {
+const parseAcceptHeader = acceptHeader => {
+  const acceptHeaderObject = parseMultipleHeader(acceptHeader, {
+    validateProperty: ({
+      name
+    }) => {
+      // read only q, anything else is ignored
+      return name === "q";
+    }
+  });
+  const accepts = [];
+  Object.keys(acceptHeaderObject).forEach(key => {
     const {
-      register,
-      callback
-    } = eventMap[name];
-    unregisterMap[name] = register((...args) => {
-      unregisterAll();
-      callback(...args);
+      q = 1
+    } = acceptHeaderObject[key];
+    const value = key;
+    accepts.push({
+      value,
+      quality: q
     });
   });
-  return unregisterAll;
-};
-
-const teardownSignal = {
-  addCallback: addCallback$5
-};
-
-const firstOperationMatching$1 = ({
-  array,
-  start,
-  predicate
-}) => {
-  if (typeof array !== "object") throw new TypeError(createArrayErrorMessage({
-    array
-  }));
-  if (typeof start !== "function") throw new TypeError(createStartErrorMessage({
-    start
-  }));
-  if (typeof predicate !== "function") throw new TypeError(createPredicateErrorMessage({
-    predicate
-  }));
-  return new Promise((resolve, reject) => {
-    const visit = index => {
-      if (index >= array.length) {
-        return resolve();
-      }
-
-      const input = array[index];
-      const returnValue = start(input);
-      return Promise.resolve(returnValue).then(output => {
-        if (predicate(output)) {
-          return resolve(output);
-        }
-
-        return visit(index + 1);
-      }, reject);
-    };
-
-    visit(0);
+  accepts.sort((a, b) => {
+    return b.quality - a.quality;
   });
+  return accepts;
 };
 
-const createArrayErrorMessage = ({
-  array
-}) => `array must be an object.
-array: ${array}`;
-
-const createStartErrorMessage = ({
-  start
-}) => `start must be a function.
-start: ${start}`;
-
-const createPredicateErrorMessage = ({
-  predicate
-}) => `predicate must be a function.
-predicate: ${predicate}`;
-
-/*
-why unadvised ?
-- First because you should not do anything when a process uncaughtException
-or unhandled rejection happens.
-You cannot assume assume or trust the state of your process so you're
-likely going to throw an other error trying to handle the first one.
-- Second because the error stack trace will be modified making it harder
-to reach back what cause the error
-
-Instead you should monitor your process with an other one
-and when the monitored process die, here you can do what you want
-like analysing logs to find what cause process to die, ping a log server, ...
-*/
-let recoverCallbackArray = [];
-let uninstall$1;
-
-const addCallback$6 = callback => {
-  if (recoverCallbackArray.length === 0) uninstall$1 = install$1();
-  recoverCallbackArray = [...recoverCallbackArray, callback];
-  return () => {
-    if (recoverCallbackArray.length === 0) return;
-    recoverCallbackArray = recoverCallbackArray.filter(recoverCallback => recoverCallback !== callback);
-    if (recoverCallbackArray.length === 0) uninstall$1();
-  };
-};
-
-const install$1 = () => {
-  const onUncaughtException = error => triggerUncaughtException(error);
-
-  const onUnhandledRejection = (value, promise) => triggerUnhandledRejection(value, promise);
-
-  const onRejectionHandled = promise => recoverExceptionMatching(exception => exception.promise === promise);
-
-  process.on("unhandledRejection", onUnhandledRejection);
-  process.on("rejectionHandled", onRejectionHandled);
-  process.on("uncaughtException", onUncaughtException);
-  return () => {
-    process.removeListener("unhandledRejection", onUnhandledRejection);
-    process.removeListener("rejectionHandled", onRejectionHandled);
-    process.removeListener("uncaughtException", onRejectionHandled);
-  };
-};
-
-const triggerUncaughtException = error => crash({
-  type: "uncaughtException",
-  value: error
-});
-
-const triggerUnhandledRejection = (value, promise) => crash({
-  type: "unhandledRejection",
+const getContentTypeAcceptanceScore = ({
   value,
-  promise
-});
+  quality
+}, availableContentType) => {
+  const [acceptedType, acceptedSubtype] = decomposeContentType(value);
+  const [availableType, availableSubtype] = decomposeContentType(availableContentType);
+  const typeAccepted = acceptedType === "*" || acceptedType === availableType;
+  const subtypeAccepted = acceptedSubtype === "*" || acceptedSubtype === availableSubtype;
 
-let isCrashing = false;
-let crashReason;
-let resolveRecovering;
-
-const crash = async reason => {
-  if (isCrashing) {
-    console.log(`cannot recover due to ${crashReason.type} during recover`);
-    console.error(crashReason.value);
-    resolveRecovering(false);
-    return;
+  if (typeAccepted && subtypeAccepted) {
+    return quality;
   }
 
-  console.log(`process starts crashing due to ${crashReason.type}`);
-  console.log(`trying to recover`);
-  isCrashing = true;
-  crashReason = reason;
-  const externalRecoverPromise = new Promise(resolve => {
-    resolveRecovering = resolve;
-  });
-  const callbackRecoverPromise = firstOperationMatching$1({
-    array: recoverCallbackArray,
-    start: recoverCallback => recoverCallback(reason),
-    predicate: recovered => typeof recovered === "boolean"
-  });
-  const recoverPromise = Promise.race([externalRecoverPromise, callbackRecoverPromise]);
-
-  try {
-    const recovered = await recoverPromise;
-    if (recovered) return;
-  } catch (error) {
-    console.error(`cannot recover due to internal recover error`);
-    console.error(error);
-  }
-
-  crashReason = undefined; // uninstall() prevent catching of the next throw
-  // else the following would create an infinite loop
-  // process.on('uncaughtException', function() {
-  //     setTimeout(function() {
-  //         throw 'yo';
-  //     });
-  // });
-
-  uninstall$1();
-  throw reason.value; // this mess up the stack trace :'(
+  return -1;
 };
 
-const recoverExceptionMatching = predicate => {
-  if (isCrashing && predicate(crashReason)) {
-    resolveRecovering(true);
-  }
+const decomposeContentType = fullType => {
+  const [type, subtype] = fullType.split("/");
+  return [type, subtype];
 };
-
-const unadvisedCrashSignal = {
-  addCallback: addCallback$6
-};
-
-const wrapFunctionToCatchCancellation = asyncFunction => async (...args) => {
-  try {
-    const value = await asyncFunction(...args);
-    return value;
-  } catch (error) {
-    if (isCancelError(error)) {
-      // it means consume of the function will resolve with a cancelError
-      // but when you cancel it means you're not interested in the result anymore
-      // thanks to this it avoid unhandledRejection
-      return error;
-    }
-
-    throw error;
-  }
-};
-
-const wrapFunctionToConsiderUnhandledRejectionsAsExceptions = fn => async (...args) => {
-  const uninstall = installUnhandledRejectionMode();
-
-  try {
-    const value = await fn(...args);
-    return value;
-  } finally {
-    // don't remove it immediatly to let nodejs emit the unhandled rejection
-    setTimeout(() => {
-      uninstall();
-    });
-  }
-};
-
-const installUnhandledRejectionMode = () => {
-  const unhandledRejectionArg = getCommandArgument(process.execArgv, "--unhandled-rejections");
-
-  if (unhandledRejectionArg === "strict") {
-    return () => {};
-  }
-
-  if (unhandledRejectionArg === "throw") {
-    return () => {};
-  }
-
-  const onUnhandledRejection = reason => {
-    throw reason;
-  };
-
-  process.once("unhandledRejection", onUnhandledRejection);
-  return () => {
-    console.log("remove");
-    process.removeListener("unhandledRejection", onUnhandledRejection);
-  };
-};
-
-const getCommandArgument = (argv, name) => {
-  let i = 0;
-
-  while (i < argv.length) {
-    const arg = argv[i];
-
-    if (arg === name) {
-      return {
-        name,
-        index: i,
-        value: ""
-      };
-    }
-
-    if (arg.startsWith(`${name}=`)) {
-      return {
-        name,
-        index: i,
-        value: arg.slice(`${name}=`.length)
-      };
-    }
-
-    i++;
-  }
-
-  return null;
-};
-
-const executeAsyncFunction = (fn, {
-  catchCancellation = false,
-  considerUnhandledRejectionsAsExceptions = false
-} = {}) => {
-  if (catchCancellation) {
-    fn = wrapFunctionToCatchCancellation(fn);
-  }
-
-  if (considerUnhandledRejectionsAsExceptions) {
-    fn = wrapFunctionToConsiderUnhandledRejectionsAsExceptions(fn);
-  }
-
-  return fn();
-};
-
-const ensureUrlTrailingSlash = url => {
-  return url.endsWith("/") ? url : `${url}/`;
-};
-
-const isFileSystemPath = value => {
-  if (typeof value !== "string") {
-    throw new TypeError(`isFileSystemPath first arg must be a string, got ${value}`);
-  }
-
-  if (value[0] === "/") return true;
-  return startsWithWindowsDriveLetter(value);
-};
-
-const startsWithWindowsDriveLetter = string => {
-  const firstChar = string[0];
-  if (!/[a-zA-Z]/.test(firstChar)) return false;
-  const secondChar = string[1];
-  if (secondChar !== ":") return false;
-  return true;
-};
-
-const fileSystemPathToUrl = value => {
-  if (!isFileSystemPath(value)) {
-    throw new Error(`received an invalid value for fileSystemPath: ${value}`);
-  }
-
-  return String(url$1.pathToFileURL(value));
-};
-
-const assertAndNormalizeDirectoryUrl = value => {
-  let urlString;
-
-  if (value instanceof URL) {
-    urlString = value.href;
-  } else if (typeof value === "string") {
-    if (isFileSystemPath(value)) {
-      urlString = fileSystemPathToUrl(value);
-    } else {
-      try {
-        urlString = String(new URL(value));
-      } catch (e) {
-        throw new TypeError(`directoryUrl must be a valid url, received ${value}`);
-      }
-    }
-  } else {
-    throw new TypeError(`directoryUrl must be a string or an url, received ${value}`);
-  }
-
-  if (!urlString.startsWith("file://")) {
-    throw new Error(`directoryUrl must starts with file://, received ${value}`);
-  }
-
-  return ensureUrlTrailingSlash(urlString);
-};
-
-const assertAndNormalizeFileUrl = (value, baseUrl) => {
-  let urlString;
-
-  if (value instanceof URL) {
-    urlString = value.href;
-  } else if (typeof value === "string") {
-    if (isFileSystemPath(value)) {
-      urlString = fileSystemPathToUrl(value);
-    } else {
-      try {
-        urlString = String(new URL(value, baseUrl));
-      } catch (e) {
-        throw new TypeError(`fileUrl must be a valid url, received ${value}`);
-      }
-    }
-  } else {
-    throw new TypeError(`fileUrl must be a string or an url, received ${value}`);
-  }
-
-  if (!urlString.startsWith("file://")) {
-    throw new Error(`fileUrl must starts with file://, received ${value}`);
-  }
-
-  return urlString;
-};
-
-const urlToFileSystemPath = fileUrl => {
-  if (fileUrl[fileUrl.length - 1] === "/") {
-    // remove trailing / so that nodejs path becomes predictable otherwise it logs
-    // the trailing slash on linux but does not on windows
-    fileUrl = fileUrl.slice(0, -1);
-  }
-
-  const fileSystemPath = url$1.fileURLToPath(fileUrl);
-  return fileSystemPath;
-};
-
-const isWindows = process.platform === "win32";
-
-const ETAG_FOR_EMPTY_CONTENT = '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
-const bufferToEtag = buffer => {
-  if (!Buffer.isBuffer(buffer)) {
-    throw new TypeError(`buffer expected, got ${buffer}`);
-  }
-
-  if (buffer.length === 0) {
-    return ETAG_FOR_EMPTY_CONTENT;
-  }
-
-  const hash = crypto.createHash("sha1");
-  hash.update(buffer, "utf8");
-  const hashBase64String = hash.digest("base64");
-  const hashBase64StringSubset = hashBase64String.slice(0, 27);
-  const length = buffer.length;
-  return `"${length.toString(16)}-${hashBase64StringSubset}"`;
-};
-
-const readDirectory = async (url, {
-  emfileMaxWait = 1000
-} = {}) => {
-  const directoryUrl = assertAndNormalizeDirectoryUrl(url);
-  const directoryPath = urlToFileSystemPath(directoryUrl);
-  const startMs = Date.now();
-  let attemptCount = 0;
-
-  const attempt = () => {
-    return readdirNaive(directoryPath, {
-      handleTooManyFilesOpenedError: async error => {
-        attemptCount++;
-        const nowMs = Date.now();
-        const timeSpentWaiting = nowMs - startMs;
-
-        if (timeSpentWaiting > emfileMaxWait) {
-          throw error;
-        }
-
-        return new Promise(resolve => {
-          setTimeout(() => {
-            resolve(attempt());
-          }, attemptCount);
-        });
-      }
-    });
-  };
-
-  return attempt();
-};
-
-const readdirNaive = (directoryPath, {
-  handleTooManyFilesOpenedError = null
-} = {}) => {
-  return new Promise((resolve, reject) => {
-    fs.readdir(directoryPath, (error, names) => {
-      if (error) {
-        // https://nodejs.org/dist/latest-v13.x/docs/api/errors.html#errors_common_system_errors
-        if (handleTooManyFilesOpenedError && (error.code === "EMFILE" || error.code === "ENFILE")) {
-          resolve(handleTooManyFilesOpenedError(error));
-        } else {
-          reject(error);
-        }
-      } else {
-        resolve(names);
-      }
-    });
-  });
-};
-
-const isWindows$1 = process.platform === "win32";
-const baseUrlFallback = fileSystemPathToUrl(process.cwd());
-
-const isWindows$2 = process.platform === "win32";
-
-const memoize = compute => {
-  let memoized = false;
-  let memoizedValue;
-
-  const fnWithMemoization = (...args) => {
-    if (memoized) {
-      return memoizedValue;
-    } // if compute is recursive wait for it to be fully done before storing the value
-    // so set memoized boolean after the call
-
-
-    memoizedValue = compute(...args);
-    memoized = true;
-    return memoizedValue;
-  };
-
-  fnWithMemoization.forget = () => {
-    const value = memoizedValue;
-    memoized = false;
-    memoizedValue = undefined;
-    return value;
-  };
-
-  return fnWithMemoization;
-};
-
-const readFilePromisified = util.promisify(fs.readFile);
-
-const isWindows$3 = process.platform === "win32";
-
-/* eslint-disable import/max-dependencies */
-const isLinux = process.platform === "linux"; // linux does not support recursive option
 
 const timeStart = name => {
   // as specified in https://w3c.github.io/server-timing/#the-performanceservertiming-interface
@@ -1572,15 +730,41 @@ const timeFunction = (name, fn) => {
 // yes it's awful, feel free to PR with a better approach :)
 
 const timingToServerTimingResponseHeaders = timing => {
-  const serverTimingValue = Object.keys(timing).map((key, index) => {
-    const time = timing[key];
-    return `${letters[index] || "zz"};desc="${key}";dur=${time}`;
-  }).join(", ");
+  const serverTimingHeader = {};
+  Object.keys(timing).forEach((key, index) => {
+    const name = letters[index] || "zz";
+    serverTimingHeader[name] = {
+      desc: key,
+      dur: timing[key]
+    };
+  });
+  const serverTimingHeaderString = stringifyServerTimingHeader(serverTimingHeader);
   return {
-    "server-timing": serverTimingValue
+    "server-timing": serverTimingHeaderString
   };
 };
-const letters = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t"];
+const letters = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"];
+const stringifyServerTimingHeader = serverTimingHeader => {
+  return stringifyMultipleHeader(serverTimingHeader, {
+    validateName: validateServerTimingName
+  });
+}; // (),/:;<=>?@[\]{}" Don't allowed
+// Minimal length is one symbol
+// Digits, alphabet characters,
+// and !#$%&'*+-.^_`|~ are allowed
+// https://www.w3.org/TR/2019/WD-server-timing-20190307/#the-server-timing-header-field
+// https://tools.ietf.org/html/rfc7230#section-3.2.6
+
+const validateServerTimingName = name => {
+  const valid = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/gi.test(name);
+
+  if (!valid) {
+    console.warn(`server timing contains invalid symbols`);
+    return false;
+  }
+
+  return true;
+};
 
 const jsenvContentTypeMap = {
   "application/javascript": {
@@ -1591,6 +775,9 @@ const jsenvContentTypeMap = {
   },
   "application/importmap+json": {
     extensions: ["importmap"]
+  },
+  "application/manifest+json": {
+    extensions: ["webmanifest"]
   },
   "application/octet-stream": {},
   "application/pdf": {
@@ -1659,6 +846,9 @@ const jsenvContentTypeMap = {
   "text/css": {
     extensions: ["css"]
   },
+  "text/x-sass": {
+    extensions: ["sass"]
+  },
   "text/cache-manifest": {
     extensions: ["appcache"]
   },
@@ -1698,26 +888,103 @@ const urlToContentType = (url, contentTypeMap = jsenvContentTypeMap, contentType
   return contentTypeForExtension || contentTypeDefault;
 };
 
+const negotiateContentEncoding = (request, availableEncodings) => {
+  const {
+    headers = {}
+  } = request;
+  const requestAcceptEncodingHeader = headers["accept-encoding"];
+
+  if (!requestAcceptEncodingHeader) {
+    return null;
+  }
+
+  const encodingsAccepted = parseAcceptEncodingHeader(requestAcceptEncodingHeader);
+  return applyContentNegotiation({
+    accepteds: encodingsAccepted,
+    availables: availableEncodings,
+    getAcceptanceScore: getEncodingAcceptanceScore
+  });
+};
+
+const parseAcceptEncodingHeader = acceptEncodingHeaderString => {
+  const acceptEncodingHeader = parseMultipleHeader(acceptEncodingHeaderString, {
+    validateProperty: ({
+      name
+    }) => {
+      // read only q, anything else is ignored
+      return name === "q";
+    }
+  });
+  const encodingsAccepted = [];
+  Object.keys(acceptEncodingHeader).forEach(key => {
+    const {
+      q = 1
+    } = acceptEncodingHeader[key];
+    const value = key;
+    encodingsAccepted.push({
+      value,
+      quality: q
+    });
+  });
+  encodingsAccepted.sort((a, b) => {
+    return b.quality - a.quality;
+  });
+  return encodingsAccepted;
+};
+
+const getEncodingAcceptanceScore = ({
+  value,
+  quality
+}, availableEncoding) => {
+  if (value === "*") {
+    return quality;
+  } // normalize br to brotli
+
+
+  if (value === "br") value = "brotli";
+  if (availableEncoding === "br") availableEncoding = "brotli";
+
+  if (value === availableEncoding) {
+    return quality;
+  }
+
+  return -1;
+};
+
 const {
   readFile
 } = fs.promises;
 const ETAG_CACHE = new Map();
 const ETAG_CACHE_MAX_SIZE = 500;
-const serveFile = async (source, {
-  cancellationToken = createCancellationToken(),
-  method = "GET",
-  headers = {},
+const serveFile = async (request, {
+  rootDirectoryUrl,
   contentTypeMap = jsenvContentTypeMap,
   etagEnabled = false,
   etagCacheDisabled = false,
   mtimeEnabled = false,
+  compressionEnabled = false,
+  compressionSizeThreshold = 1024,
   cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
   canReadDirectory = false,
   readableStreamLifetimeInSeconds = 5
 } = {}) => {
-  // here you might be tempted to add || cacheControl === 'no-cache'
+  try {
+    rootDirectoryUrl = util.assertAndNormalizeDirectoryUrl(rootDirectoryUrl);
+  } catch (e) {
+    const body = `Cannot serve file because rootDirectoryUrl parameter is not a directory url: ${rootDirectoryUrl}`;
+    return {
+      status: 404,
+      headers: {
+        "content-type": "text/plain",
+        "content-length": Buffer.byteLength(body)
+      },
+      body
+    };
+  } // here you might be tempted to add || cacheControl === 'no-cache'
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
+
+
   if (cacheControl === "no-store") {
     if (etagEnabled) {
       console.warn(`cannot enable etag when cache-control is ${cacheControl}`);
@@ -1735,18 +1002,26 @@ const serveFile = async (source, {
     mtimeEnabled = false;
   }
 
+  const {
+    method,
+    ressource
+  } = request;
+
   if (method !== "GET" && method !== "HEAD") {
     return {
       status: 501
     };
   }
 
-  const sourceUrl = assertAndNormalizeFileUrl(source);
+  let sourceUrl = util.resolveUrl(ressource.slice(1), rootDirectoryUrl);
+  const sourceFileSystemPath = util.urlToFileSystemPath(sourceUrl);
 
   try {
-    const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () => fs.statSync(urlToFileSystemPath(sourceUrl)));
+    const [readStatTiming, sourceStat] = await timeFunction("file service>read file stat", () => fs.statSync(sourceFileSystemPath));
 
     if (sourceStat.isDirectory()) {
+      sourceUrl = util.resolveDirectoryUrl(ressource.slice(1), rootDirectoryUrl);
+
       if (canReadDirectory === false) {
         return {
           status: 403,
@@ -1755,22 +1030,60 @@ const serveFile = async (source, {
         };
       }
 
-      const [readDirectoryTiming, directoryContentArray] = await timeFunction("file service>read directory", () => createOperation({
-        cancellationToken,
-        start: () => readDirectory(sourceUrl)
+      const [readDirectoryTiming, directoryContentArray] = await timeFunction("file service>read directory", () => cancellation.createOperation({
+        cancellationToken: request.cancellationToken,
+        start: () => util.readDirectory(sourceUrl)
       }));
-      const directoryContentJson = JSON.stringify(directoryContentArray);
-      return {
-        status: 200,
-        headers: {
-          "content-type": "application/json",
-          "content-length": directoryContentJson.length
+      const responseProducers = {
+        "application/json": () => {
+          const directoryContentJson = JSON.stringify(directoryContentArray);
+          return {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "content-length": directoryContentJson.length
+            },
+            body: directoryContentJson,
+            timing: { ...readStatTiming,
+              ...readDirectoryTiming
+            }
+          };
         },
-        body: directoryContentJson,
-        timing: { ...readStatTiming,
-          ...readDirectoryTiming
+        "text/html": () => {
+          const directoryAsHtml = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Directory explorer</title>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+  </head>
+
+  <body>
+    <h1>Content of directory ${sourceUrl}</h1>
+    <ul>
+      ${directoryContentArray.map(filename => {
+            const fileUrl = util.resolveUrl(filename, sourceUrl);
+            const fileUrlRelativeToServer = util.urlToRelativeUrl(fileUrl, rootDirectoryUrl);
+            return `<li>
+        <a href="/${fileUrlRelativeToServer}">${fileUrlRelativeToServer}</a>
+      </li>`;
+          }).join(`
+      `)}
+    </ul>
+  </body>
+</html>`;
+          return {
+            status: 200,
+            headers: {
+              "content-type": "text/html",
+              "content-length": Buffer.byteLength(directoryAsHtml)
+            },
+            body: directoryAsHtml
+          };
         }
       };
+      const bestContentType = negotiateContentType(request, Object.keys(responseProducers));
+      return responseProducers[bestContentType || "application/json"]();
     } // not a file, give up
 
 
@@ -1781,13 +1094,10 @@ const serveFile = async (source, {
       };
     }
 
-    const clientCacheResponse = await getClientCacheResponse({
-      cancellationToken,
+    const clientCacheResponse = await getClientCacheResponse(request, {
       etagEnabled,
       etagCacheDisabled,
       mtimeEnabled,
-      method,
-      headers,
       sourceStat,
       sourceUrl
     }); // send 304 (redirect response to client cache)
@@ -1803,29 +1113,40 @@ const serveFile = async (source, {
       }, clientCacheResponse);
     }
 
-    const rawResponse = await getRawResponse({
-      cancellationToken,
-      canReadDirectory,
-      contentTypeMap,
-      method,
-      headers,
-      sourceStat,
-      sourceUrl
-    });
+    let response;
 
-    if (rawResponse.body) {
+    if (compressionEnabled && sourceStat.size >= compressionSizeThreshold) {
+      const compressedResponse = await getCompressedResponse(request, {
+        sourceUrl,
+        contentTypeMap
+      });
+
+      if (compressedResponse) {
+        response = compressedResponse;
+      }
+    }
+
+    if (!response) {
+      response = await getRawResponse(request, {
+        sourceStat,
+        sourceUrl,
+        contentTypeMap
+      });
+    }
+
+    if (response.body) {
       // do not keep readable stream opened on that file
       // otherwise file is kept open forever.
       // moreover it will prevent to unlink the file on windows.
       if (clientCacheResponse.body) {
-        rawResponse.body.destroy();
+        response.body.destroy();
       } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
         // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
         const timeout = setTimeout(() => {
           console.warn(`readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`);
-          rawResponse.body.destroy();
+          response.body.destroy();
         }, readableStreamLifetimeInSeconds * 1000);
-        onceReadableStreamUsedOrClosed(rawResponse.body, () => {
+        onceReadableStreamUsedOrClosed(response.body, () => {
           clearTimeout(timeout);
         });
       }
@@ -1843,22 +1164,26 @@ const serveFile = async (source, {
         // ...(headers["cache-control"] === "no-store" ? { "cache-control": "no-store" } : {}),
 
       }
-    }, rawResponse, clientCacheResponse);
+    }, response, clientCacheResponse);
   } catch (e) {
     return convertFileSystemErrorToResponseProperties(e);
   }
 };
 
-const getClientCacheResponse = async ({
-  headers,
+const getClientCacheResponse = async (request, {
   etagEnabled,
   etagCacheDisabled,
   mtimeEnabled,
-  ...rest
+  sourceStat,
+  sourceUrl
 }) => {
   // here you might be tempted to add || headers["cache-control"] === "no-cache"
   // but no-cache means ressource can be cache but must be revalidated (yeah naming is strange)
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control#Cacheability
+  const {
+    headers = {}
+  } = request;
+
   if (headers["cache-control"] === "no-store" || // let's disable it on no-cache too (https://github.com/jsenv/jsenv-server/issues/17)
   headers["cache-control"] === "no-cache") {
     return {
@@ -1867,17 +1192,16 @@ const getClientCacheResponse = async ({
   }
 
   if (etagEnabled) {
-    return getEtagResponse({
+    return getEtagResponse(request, {
       etagCacheDisabled,
-      headers,
-      ...rest
+      sourceStat,
+      sourceUrl
     });
   }
 
   if (mtimeEnabled) {
-    return getMtimeResponse({
-      headers,
-      ...rest
+    return getMtimeResponse(request, {
+      sourceStat
     });
   }
 
@@ -1886,20 +1210,19 @@ const getClientCacheResponse = async ({
   };
 };
 
-const getEtagResponse = async ({
+const getEtagResponse = async (request, {
   etagCacheDisabled,
-  cancellationToken,
   sourceUrl,
-  sourceStat,
-  headers
+  sourceStat
 }) => {
-  const [computeEtagTiming, fileContentEtag] = await timeFunction("file service>generate file etag", () => computeEtag({
-    cancellationToken,
+  const [computeEtagTiming, fileContentEtag] = await timeFunction("file service>generate file etag", () => computeEtag(request, {
     etagCacheDisabled,
-    headers,
     sourceUrl,
     sourceStat
   }));
+  const {
+    headers = {}
+  } = request;
   const requestHasIfNoneMatchHeader = ("if-none-match" in headers);
 
   if (requestHasIfNoneMatchHeader && headers["if-none-match"] === fileContentEtag) {
@@ -1918,8 +1241,7 @@ const getEtagResponse = async ({
   };
 };
 
-const computeEtag = async ({
-  cancellationToken,
+const computeEtag = async (request, {
   etagCacheDisabled,
   sourceUrl,
   sourceStat
@@ -1932,11 +1254,11 @@ const computeEtag = async ({
     }
   }
 
-  const fileContentAsBuffer = await createOperation({
-    cancellationToken,
-    start: () => readFile(urlToFileSystemPath(sourceUrl))
+  const fileContentAsBuffer = await cancellation.createOperation({
+    cancellationToken: request.cancellationToken,
+    start: () => readFile(util.urlToFileSystemPath(sourceUrl))
   });
-  const eTag = bufferToEtag(fileContentAsBuffer);
+  const eTag = util.bufferToEtag(fileContentAsBuffer);
 
   if (!etagCacheDisabled) {
     if (ETAG_CACHE.size >= ETAG_CACHE_MAX_SIZE) {
@@ -1965,10 +1287,13 @@ const fileStatAreTheSame = (leftFileStat, rightFileStat) => {
 const fileStatKeysToCompare = [// mtime the the most likely to change, check it first
 "mtimeMs", "size", "ctimeMs", "ino", "mode", "uid", "gid", "blksize"];
 
-const getMtimeResponse = async ({
-  sourceStat,
-  headers
+const getMtimeResponse = async (request, {
+  sourceStat
 }) => {
+  const {
+    headers = {}
+  } = request;
+
   if ("if-modified-since" in headers) {
     let cachedModificationDate;
 
@@ -1998,7 +1323,57 @@ const getMtimeResponse = async ({
   };
 };
 
-const getRawResponse = async ({
+const getCompressedResponse = async (request, {
+  sourceUrl,
+  contentTypeMap
+}) => {
+  const acceptedCompressionFormat = negotiateContentEncoding(request, Object.keys(availableCompressionFormats));
+
+  if (!acceptedCompressionFormat) {
+    return null;
+  }
+
+  const fileReadableStream = fileUrlToReadableStream(sourceUrl);
+  const body = await availableCompressionFormats[acceptedCompressionFormat](fileReadableStream);
+  return {
+    status: 200,
+    headers: {
+      "content-type": urlToContentType(sourceUrl, contentTypeMap),
+      "content-encoding": acceptedCompressionFormat,
+      "vary": "accept-encoding"
+    },
+    body
+  };
+};
+
+const fileUrlToReadableStream = fileUrl => {
+  return fs.createReadStream(util.urlToFileSystemPath(fileUrl), {
+    emitClose: true
+  });
+};
+
+const availableCompressionFormats = {
+  br: async fileReadableStream => {
+    const {
+      createBrotliCompress
+    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('zlib')); });
+    return fileReadableStream.pipe(createBrotliCompress());
+  },
+  deflate: async fileReadableStream => {
+    const {
+      createDeflate
+    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('zlib')); });
+    return fileReadableStream.pipe(createDeflate());
+  },
+  gzip: async fileReadableStream => {
+    const {
+      createGzip
+    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('zlib')); });
+    return fileReadableStream.pipe(createGzip());
+  }
+};
+
+const getRawResponse = async (request, {
   sourceStat,
   sourceUrl,
   contentTypeMap
@@ -2009,9 +1384,7 @@ const getRawResponse = async ({
       "content-type": urlToContentType(sourceUrl, contentTypeMap),
       "content-length": sourceStat.size
     },
-    body: fs.createReadStream(urlToFileSystemPath(sourceUrl), {
-      emitClose: true
-    })
+    body: fileUrlToReadableStream(sourceUrl)
   };
 };
 
@@ -2045,8 +1418,7 @@ const {
   Response
 } = nodeFetch;
 const fetchUrl = async (url, {
-  cancellationToken = createCancellationToken(),
-  simplified = false,
+  cancellationToken = cancellation.createCancellationToken(),
   ignoreHttpsError = false,
   canReadDirectory,
   contentTypeMap,
@@ -2060,13 +1432,26 @@ const fetchUrl = async (url, {
   }
 
   if (url.startsWith("file://")) {
+    const origin = util.urlToOrigin(url);
+    let ressource = util.urlToRessource(url);
+
+    if (process.platform === "win32") {
+      ressource = `/${replaceBackSlashesWithSlashes(ressource)}`;
+    }
+
+    const request = {
+      cancellationToken,
+      method: options.method || "GET",
+      headers: options.headers || {},
+      ressource
+    };
     const {
       status,
       statusText,
       headers,
       body
-    } = await serveFile(url, {
-      cancellationToken,
+    } = await serveFile(request, {
+      rootDirectoryUrl: origin,
       cacheStrategy,
       canReadDirectory,
       contentTypeMap,
@@ -2078,7 +1463,7 @@ const fetchUrl = async (url, {
       statusText,
       headers
     });
-    return simplified ? standardResponseToSimplifiedResponse(response) : response;
+    return response;
   }
 
   if (url.startsWith("data:")) {
@@ -2095,7 +1480,7 @@ const fetchUrl = async (url, {
         "content-type": mediaType
       }
     });
-    return simplified ? standardResponseToSimplifiedResponse(response) : response;
+    return response;
   } // cancellation might be requested early, abortController does not support that
   // so we have to throw if requested right away
 
@@ -2140,27 +1525,10 @@ const fetchUrl = async (url, {
     throw e;
   }
 
-  return simplified ? standardResponseToSimplifiedResponse(response) : response;
+  return response;
 };
 
-const standardResponseToSimplifiedResponse = async response => {
-  const text = await response.text();
-  return {
-    url: response.url,
-    status: response.status,
-    statusText: response.statusText,
-    headers: responseToHeaders(response),
-    body: text
-  };
-};
-
-const responseToHeaders = response => {
-  const headers = {};
-  response.headers.forEach((value, name) => {
-    headers[name] = value;
-  });
-  return headers;
-};
+const replaceBackSlashesWithSlashes = string => string.replace(/\\/g, "/");
 
 const parseDataUrl = dataUrl => {
   const afterDataProtocol = dataUrl.slice("data:".length);
@@ -2191,7 +1559,7 @@ const listen = ({
   port,
   ip
 }) => {
-  return createStoppableOperation({
+  return cancellation.createStoppableOperation({
     cancellationToken,
     start: () => startListening(server, port, ip),
     stop: () => stopListening(server)
@@ -2213,7 +1581,7 @@ const stopListening = server => new Promise((resolve, reject) => {
 });
 
 const findFreePort = async (initialPort = 1, {
-  cancellationToken = createCancellationToken(),
+  cancellationToken = cancellation.createCancellationToken(),
   ip = "127.0.0.1",
   min = 1,
   max = 65534,
@@ -2277,9 +1645,17 @@ const portIsFree = async ({
   return true;
 };
 
+const headersToObject = headers => {
+  const headersObject = {};
+  headers.forEach((value, name) => {
+    headersObject[name] = value;
+  });
+  return headersObject;
+};
+
 const firstService = (...callbacks) => {
   return request => {
-    return firstOperationMatching({
+    return cancellation.firstOperationMatching({
       array: callbacks,
       start: callback => callback(request),
       predicate: serviceGeneratedResponsePredicate
@@ -2289,7 +1665,7 @@ const firstService = (...callbacks) => {
 const firstServiceWithTiming = namedServices => {
   return async request => {
     const servicesTiming = {};
-    const response = await firstOperationMatching({
+    const response = await cancellation.firstOperationMatching({
       array: Object.keys(namedServices).map(serviceName => {
         return {
           serviceName,
@@ -2334,6 +1710,75 @@ const serviceGeneratedResponsePredicate = value => {
 const jsenvAccessControlAllowedHeaders = ["x-requested-with"];
 
 const jsenvAccessControlAllowedMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"];
+
+const jsenvServerInternalErrorToResponse = (serverInternalError, {
+  request,
+  sendServerInternalErrorDetails = false
+}) => {
+  const serverInternalErrorIsAPrimitive = serverInternalError === null || typeof serverInternalError !== "object" && typeof serverInternalError !== "function";
+  const dataToSend = serverInternalErrorIsAPrimitive ? {
+    code: "VALUE_THROWED",
+    value: serverInternalError
+  } : {
+    code: serverInternalError.code || "UNKNOWN_ERROR",
+    ...(sendServerInternalErrorDetails ? {
+      stack: serverInternalError.stack,
+      ...serverInternalError
+    } : {})
+  };
+  const availableContentTypes = {
+    "text/html": () => {
+      const renderHtmlForErrorWithoutDetails = () => {
+        return `<p>Details not available: to enable them server must be started with sendServerInternalErrorDetails: true.</p>`;
+      };
+
+      const renderHtmlForErrorWithDetails = () => {
+        if (serverInternalErrorIsAPrimitive) {
+          return `<pre>${JSON.stringify(serverInternalError, null, "  ")}</pre>`;
+        }
+
+        return `<pre>${serverInternalError.stack}</pre>`;
+      };
+
+      const body = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Internal server error</title>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+  </head>
+
+  <body>
+    <h1>Internal server error</h1>
+    <p>${serverInternalErrorIsAPrimitive ? `Code inside server has thrown a literal.` : `Code inside server has thrown an error.`}</p>
+    <details>
+      <summary>See internal error details</summary>
+      ${sendServerInternalErrorDetails ? renderHtmlForErrorWithDetails() : renderHtmlForErrorWithoutDetails()}
+    </details>
+  </body>
+</html>`;
+      return {
+        headers: {
+          "content-type": "text/html",
+          "content-length": Buffer.byteLength(body)
+        },
+        body
+      };
+    },
+    "application/json": () => {
+      const body = JSON.stringify(dataToSend);
+      return {
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body)
+        },
+        body
+      };
+    }
+  };
+  const bestContentType = negotiateContentType(request, Object.keys(availableContentTypes));
+  return availableContentTypes[bestContentType || "application/json"]();
+};
 
 const jsenvPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA7g8u1+cEfCDTX2aMPkCjehz29cJpSqL8DZD7SPvznmXMXY8U
@@ -2396,22 +1841,121 @@ MHOw0+Zg5Ls7pHo2bN7n1LseYeIt6M90q8/vRS6VjzWImJswxsdqSCP8TZxVb5S5
 p2OCbNpxQVtgLpUgLd9ePT2eX2kRTI8knM+C+e7L
 -----END CERTIFICATE-----`;
 
+const negotiateContentLanguage = (request, availableLanguages) => {
+  const {
+    headers = {}
+  } = request;
+  const requestAcceptLanguageHeader = headers["accept-language"];
+
+  if (!requestAcceptLanguageHeader) {
+    return null;
+  }
+
+  const languagesAccepted = parseAcceptLanguageHeader(requestAcceptLanguageHeader);
+  return applyContentNegotiation({
+    accepteds: languagesAccepted,
+    availables: availableLanguages,
+    getAcceptanceScore: getLanguageAcceptanceScore
+  });
+};
+
+const parseAcceptLanguageHeader = acceptLanguageHeaderString => {
+  const acceptLanguageHeader = parseMultipleHeader(acceptLanguageHeaderString, {
+    validateProperty: ({
+      name
+    }) => {
+      // read only q, anything else is ignored
+      return name === "q";
+    }
+  });
+  const languagesAccepted = [];
+  Object.keys(acceptLanguageHeader).forEach(key => {
+    const {
+      q = 1
+    } = acceptLanguageHeader[key];
+    const value = key;
+    languagesAccepted.push({
+      value,
+      quality: q
+    });
+  });
+  languagesAccepted.sort((a, b) => {
+    return b.quality - a.quality;
+  });
+  return languagesAccepted;
+};
+
+const getLanguageAcceptanceScore = ({
+  value,
+  quality
+}, availableLanguage) => {
+  const [acceptedPrimary, acceptedVariant] = decomposeLanguage(value);
+  const [availablePrimary, availableVariant] = decomposeLanguage(availableLanguage);
+  const primaryAccepted = acceptedPrimary === "*" || acceptedPrimary.toLowerCase() === availablePrimary.toLowerCase();
+  const variantAccepted = acceptedVariant === "*" || compareVariant(acceptedVariant, availableVariant);
+
+  if (primaryAccepted && variantAccepted) {
+    return quality + 1;
+  }
+
+  if (primaryAccepted) {
+    return quality;
+  }
+
+  return -1;
+};
+
+const decomposeLanguage = fullType => {
+  const [primary, variant] = fullType.split("-");
+  return [primary, variant];
+};
+
+const compareVariant = (left, right) => {
+  if (left === right) {
+    return true;
+  }
+
+  if (left && right && left.toLowerCase() === right.toLowerCase()) {
+    return true;
+  }
+
+  return false;
+};
+
 const urlToSearchParamValue = (url, searchParamName) => {
   return new URL(url).searchParams.get(searchParamName);
 };
 
-const readRequestBodyAsString = body => {
+const readRequestBody = (request, {
+  as = "string"
+} = {}) => {
   return new Promise((resolve, reject) => {
     const bufferArray = [];
-    body.subscribe({
+    request.body.subscribe({
       error: reject,
       next: buffer => {
         bufferArray.push(buffer);
       },
       complete: () => {
         const bodyAsBuffer = Buffer.concat(bufferArray);
-        const bodyAsString = bodyAsBuffer.toString();
-        resolve(bodyAsString);
+
+        if (as === "buffer") {
+          resolve(bodyAsBuffer);
+          return;
+        }
+
+        if (as === "string") {
+          const bodyAsString = bodyAsBuffer.toString();
+          resolve(bodyAsString);
+          return;
+        }
+
+        if (as === "json") {
+          const bodyAsString = bodyAsBuffer.toString();
+          const bodyAsJSON = JSON.parse(bodyAsString);
+          resolve(bodyAsJSON);
+          return;
+        }
       }
     });
   });
@@ -2435,10 +1979,6 @@ callback: ${callback}`);
     registerCleanupCallback,
     cleanup
   };
-};
-
-const urlToOrigin = url => {
-  return new URL(url).origin;
 };
 
 const createServer = async ({
@@ -2567,7 +2107,7 @@ const trackHttp1ServerPendingRequests = nodeServer => {
       nodeResponse
     };
     pendingClients.add(client);
-    nodeResponse.on("close", () => {
+    nodeResponse.once("close", () => {
       pendingClients.delete(client);
     });
   };
@@ -2583,7 +2123,7 @@ const trackHttp1ServerPendingRequests = nodeServer => {
       nodeResponse
     }) => {
       if (nodeResponse.headersSent === false) {
-        nodeResponse.writeHead(status, reason);
+        nodeResponse.writeHead(status, String(reason));
       } // http2
 
 
@@ -2622,6 +2162,7 @@ const trackHttp1ServerPendingRequests = nodeServer => {
   };
 };
 
+// https://github.com/jamestalmage/stream-to-observable/blob/master/index.js
 const nodeStreamToObservable = nodeStream => {
   return createObservable({
     subscribe: ({
@@ -2715,7 +2256,7 @@ const nodeRequestToRequest = (nodeRequest, {
     // in case of server cancellation from a client perspective request is not cancelled
     // because client still wants a response. But from a server perspective the production
     // of a response for this request is cancelled
-    cancellationToken: composeCancellationToken(serverCancellationToken, nodeRequestToCancellationToken(nodeRequest)),
+    cancellationToken: cancellation.composeCancellationToken(serverCancellationToken, nodeRequestToCancellationToken(nodeRequest)),
     origin: requestOrigin,
     ressource,
     method,
@@ -2728,7 +2269,7 @@ const nodeRequestToCancellationToken = nodeRequest => {
   const {
     cancel,
     token
-  } = createCancellationSource();
+  } = cancellation.createCancellationSource();
   nodeRequest.on("abort", () => {
     cancel("request aborted");
   });
@@ -2745,9 +2286,13 @@ const valueToObservable = value => {
       complete
     }) => {
       next(value);
-      complete();
+      const timer = setTimeout(() => {
+        complete();
+      });
       return {
-        unsubscribe: () => {}
+        unsubscribe: () => {
+          clearTimeout(timer);
+        }
       };
     }
   });
@@ -2813,16 +2358,18 @@ const populateNodeResponse = (nodeResponse, {
       nodeResponse.end();
     }
   });
-  cancellationToken.register(() => {
+  const cancellation = cancellationToken.register(() => {
+    cancellation.unregister();
     subscription.unsubscribe();
     nodeResponse.destroy();
   });
   nodeResponse.once("close", () => {
-    // close body in case nodeResponse is prematurely closed
+    cancellation.unregister(); // close body in case nodeResponse is prematurely closed
     // while body is writing
     // it may happen in case of server sent event
     // where body is kept open to write to client
     // and the browser is reloaded or closed for instance
+
     subscription.unsubscribe();
   });
 };
@@ -2992,18 +2539,55 @@ const trackHttp1ServerRequest = (nodeServer, fn) => {
   };
 };
 
+const checkContentNegotiation = (request, response, {
+  warn
+}) => {
+  const requestAcceptHeader = request.headers.accept;
+  const responseContentTypeHeader = response.headers["content-type"];
+
+  if (requestAcceptHeader && responseContentTypeHeader && !negotiateContentType(request, [responseContentTypeHeader])) {
+    warn(`response content type is not in the request accepted content types.
+--- response content-type header ---
+${responseContentTypeHeader}
+--- request accept header ---
+${requestAcceptHeader}`);
+  }
+
+  const requestAcceptLanguageHeader = request.headers["accept-language"];
+  const responseContentLanguageHeader = response.headers["content-language"];
+
+  if (requestAcceptLanguageHeader && responseContentLanguageHeader && !negotiateContentLanguage(request, [responseContentLanguageHeader])) {
+    warn(`response language is not in the request accepted language.
+--- response content-language header ---
+${responseContentLanguageHeader}
+--- request accept-language header ---
+${requestAcceptLanguageHeader}`);
+  }
+
+  const requestAcceptEncodingHeader = request.headers["accept-encoding"];
+  const responseContentEncodingHeader = response.headers["content-encoding"];
+
+  if (requestAcceptLanguageHeader && responseContentLanguageHeader && !negotiateContentEncoding(request, [responseContentLanguageHeader])) {
+    warn(`response encoding is not in the request accepted encoding.
+--- response content-encoding header ---
+${responseContentEncodingHeader}
+--- request accept-encoding header ---
+${requestAcceptEncodingHeader}`);
+  }
+};
+
 const require$2 = module$1.createRequire(url);
 
 const killPort = require$2("kill-port");
 
 const startServer = async ({
-  cancellationToken = createCancellationToken(),
+  cancellationToken = cancellation.createCancellationToken(),
   logLevel,
   serverName = "server",
   protocol = "http",
   http2 = false,
   http1Allowed = true,
-  redirectHttpToHttps = false,
+  redirectHttpToHttps,
   ip = "0.0.0.0",
   // will it work on windows ? https://github.com/nodejs/node/issues/14900
   port = 0,
@@ -3033,25 +2617,8 @@ const startServer = async ({
   accessControlMaxAge = 600,
   // https://www.w3.org/TR/server-timing/
   sendServerTiming = false,
-  sendInternalErrorStack = false,
-  internalErrorToResponseProperties = error => {
-    const body = error ? JSON.stringify({
-      code: error.code || "UNKNOWN_ERROR",
-      ...(sendInternalErrorStack ? {
-        stack: error.stack
-      } : {})
-    }) : JSON.stringify({
-      code: "VALUE_THROWED",
-      value: error
-    });
-    return {
-      headers: {
-        "content-type": "application/json",
-        "content-length": Buffer.byteLength(body)
-      },
-      body
-    };
-  },
+  sendServerInternalErrorDetails = false,
+  serverInternalErrorToResponse = jsenvServerInternalErrorToResponse,
   requestWaitingMs = 20000,
   requestWaitingCallback = (request, {
     logger
@@ -3063,12 +2630,13 @@ ${request.origin}${request.ressource}
 ${JSON.stringify(request.headers, null, "  ")}
 `);
   },
+  contentNegotiationWarnings = true,
   startedCallback = () => {},
   stoppedCallback = () => {},
   errorIsCancellation = () => false,
   nagle = true
 } = {}) => {
-  return executeAsyncFunction(async () => {
+  return cancellation.executeAsyncFunction(async () => {
     if (port === 0 && forcePort) {
       throw new Error(`no need to pass forcePort when port is 0`);
     }
@@ -3099,23 +2667,28 @@ ${JSON.stringify(request.headers, null, "  ")}
       throw new Error(`http2 needs "https" but protocol is "${protocol}"`);
     }
 
-    const internalCancellationSource = createCancellationSource();
-    const externalCancellationToken = cancellationToken;
-    const internalCancellationToken = internalCancellationSource.token;
-    const serverCancellationToken = composeCancellationToken(externalCancellationToken, internalCancellationToken);
-    const logger = createLogger({
+    const logger$1 = logger.createLogger({
       logLevel
     });
 
+    if (redirectHttpToHttps === undefined && protocol === "https" && !http2) {
+      redirectHttpToHttps = true;
+    }
+
     if (redirectHttpToHttps && protocol === "http") {
-      logger.warn(`redirectHttpToHttps ignored because protocol is http`);
+      logger$1.warn(`redirectHttpToHttps ignored because protocol is http`);
       redirectHttpToHttps = false;
     }
 
     if (redirectHttpToHttps && http2) {
-      logger.warn(`redirectHttpToHttps ignored because it does not work with http2. see https://github.com/nodejs/node/issues/23331`);
+      logger$1.warn(`redirectHttpToHttps ignored because it does not work with http2. see https://github.com/nodejs/node/issues/23331`);
       redirectHttpToHttps = false;
     }
+
+    const internalCancellationSource = cancellation.createCancellationSource();
+    const externalCancellationToken = cancellationToken;
+    const internalCancellationToken = internalCancellationSource.token;
+    const serverCancellationToken = cancellation.composeCancellationToken(externalCancellationToken, internalCancellationToken);
 
     const onError = error => {
       if (errorIsCancellation(error)) {
@@ -3125,21 +2698,21 @@ ${JSON.stringify(request.headers, null, "  ")}
       throw error;
     };
 
-    errorIsCancellation = composePredicate(errorIsCancellation, isCancelError);
+    errorIsCancellation = composePredicate(errorIsCancellation, cancellation.isCancelError);
     const {
       registerCleanupCallback,
       cleanup
     } = createTracker();
 
     if (stopOnCrash) {
-      const unregister = unadvisedCrashSignal.addCallback(reason => {
+      const unregister = nodeSignals.unadvisedCrashSignal.addCallback(reason => {
         internalCancellationSource.cancel(reason.value);
       });
       registerCleanupCallback(unregister);
     }
 
     if (stopOnExit) {
-      const unregister = teardownSignal.addCallback(tearDownReason => {
+      const unregister = nodeSignals.teardownSignal.addCallback(tearDownReason => {
         if (!stopOnSIGINT && tearDownReason === "SIGINT") {
           return;
         }
@@ -3154,14 +2727,14 @@ ${JSON.stringify(request.headers, null, "  ")}
       });
       registerCleanupCallback(unregister);
     } else if (stopOnSIGINT) {
-      const unregister = SIGINTSignal.addCallback(() => {
+      const unregister = nodeSignals.SIGINTSignal.addCallback(() => {
         internalCancellationSource.cancel(STOP_REASON_PROCESS_SIGINT);
       });
       registerCleanupCallback(unregister);
     }
 
     if (forcePort) {
-      await createOperation({
+      await cancellation.createOperation({
         cancellationToken: serverCancellationToken,
         start: () => killPort(port)
       });
@@ -3184,11 +2757,11 @@ ${JSON.stringify(request.headers, null, "  ")}
     const stoppedPromise = new Promise(resolve => {
       stoppedResolve = resolve;
     });
-    const stop = memoize(async (reason = STOP_REASON_NOT_SPECIFIED) => {
+    const stop = util.memoize(async (reason = STOP_REASON_NOT_SPECIFIED) => {
       status = "stopping";
       errorIsCancellation = composePredicate(errorIsCancellation, error => error === reason);
       errorIsCancellation = composePredicate(errorIsCancellation, error => error && error.code === "ECONNRESET");
-      logger.info(`${serverName} stopped because ${reason}`);
+      logger$1.info(`${serverName} stopped because ${reason}`);
       await cleanup(reason);
       await stopListening(nodeServer);
       status = "stopped";
@@ -3198,7 +2771,7 @@ ${JSON.stringify(request.headers, null, "  ")}
       stoppedResolve(reason);
     });
     serverCancellationToken.register(stop);
-    const startOperation = createStoppableOperation({
+    const startOperation = cancellation.createStoppableOperation({
       cancellationToken: serverCancellationToken,
       start: async () => {
         if (portHint) {
@@ -3263,7 +2836,7 @@ ${JSON.stringify(request.headers, null, "  ")}
         serverOrigin
       });
       nodeRequest.on("error", error => {
-        logger.error(`error on request.
+        logger$1.error(`error on request.
 --- request ressource ---
 ${request.ressource}
 --- error stack ---
@@ -3279,35 +2852,47 @@ ${error.stack}`);
           ...startRespondingTiming
         };
         response.headers = composeResponseHeaders(timingToServerTimingResponseHeaders(serverTiming), response.headers);
+
+        if (contentNegotiationWarnings) {
+          checkContentNegotiation(request, response, {
+            warn: logger$1.warn
+          });
+        }
       }
 
-      logger.info(`${request.method} ${request.origin}${request.ressource}`);
+      logger$1.info(`${request.method} ${request.origin}${request.ressource}`);
 
-      if (error && isCancelError(error) && internalCancellationToken.cancellationRequested) {
-        logger.info("ignored because server closing");
+      if (error && cancellation.isCancelError(error) && internalCancellationToken.cancellationRequested) {
+        logger$1.info("ignored because server closing");
+        nodeResponse.destroy();
+        return;
+      }
+
+      if (error && cancellation.isCancelError(error) && request.cancellationToken.cancellationRequested) {
+        logger$1.info("ignored because request canceled");
         nodeResponse.destroy();
         return;
       }
 
       if (request.aborted) {
-        logger.info(`request aborted by client`);
+        logger$1.info(`request aborted by client`);
         nodeResponse.destroy();
         return;
       }
 
       if (request.method !== "HEAD" && response.headers["content-length"] > 0 && response.body === "") {
-        logger.error(createContentLengthMismatchError(`content-length header is ${response.headers["content-length"]} but body is empty`));
+        logger$1.warn(`content-length header is ${response.headers["content-length"]} but body is empty`);
       }
 
       if (error) {
-        logger.error(`internal error while handling request.
+        logger$1.error(`internal error while handling request.
 --- error stack ---
 ${error.stack}
 --- request ---
 ${request.method} ${request.origin}${request.ressource}`);
       }
 
-      logger.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`);
+      logger$1.info(`${colorizeResponseStatus(response.status)} ${response.statusText}`);
       populateNodeResponse(nodeResponse, response, {
         cancellationToken: request.cancellationToken,
         ignoreBody: request.method === "HEAD",
@@ -3332,7 +2917,7 @@ ${request.method} ${request.origin}${request.ressource}`);
     }); // ensure we don't try to handle new requests while server is stopping
 
     registerCleanupCallback(removeRequestListener);
-    logger.info(`${serverName} started at ${serverOrigin} (${serverOrigins.external})`);
+    logger$1.info(`${serverName} started at ${serverOrigin} (${serverOrigins.external})`);
     startedCallback({
       origin: serverOrigin
     });
@@ -3395,7 +2980,7 @@ ${request.method} ${request.origin}${request.ressource}`);
         }
 
         timeout = setTimeout(() => requestWaitingCallback(request, {
-          logger,
+          logger: logger$1,
           requestWaitingMs
         }), requestWaitingMs);
         const responseProperties = await requestToResponse(request);
@@ -3413,7 +2998,10 @@ ${request.method} ${request.origin}${request.ressource}`);
               "cache-control": "no-store",
               "content-type": "text/plain"
             }
-          }), internalErrorToResponseProperties(error)),
+          }), await serverInternalErrorToResponse(error, {
+            request,
+            sendServerInternalErrorDetails
+          })),
           error
         };
       }
@@ -3429,14 +3017,7 @@ ${request.method} ${request.origin}${request.ressource}`);
   });
 };
 
-const statusToStatusText = status => http.STATUS_CODES[status] || "not specified";
-
-const createContentLengthMismatchError = message => {
-  const error = new Error(message);
-  error.code = "CONTENT_LENGTH_MISMATCH";
-  error.name = error.code;
-  return error;
-}; // https://www.w3.org/TR/cors/
+const statusToStatusText = status => http.STATUS_CODES[status] || "not specified"; // https://www.w3.org/TR/cors/
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
 
 
@@ -3464,7 +3045,7 @@ const generateAccessControlHeaders = ({
       allowedOriginArray.push(headers.origin);
       vary.push("origin");
     } else if ("referer" in headers) {
-      allowedOriginArray.push(urlToOrigin(headers.referer));
+      allowedOriginArray.push(util.urlToOrigin(headers.referer));
       vary.push("referer");
     } else {
       allowedOriginArray.push("*");
@@ -3529,7 +3110,6 @@ exports.STOP_REASON_PROCESS_EXIT = STOP_REASON_PROCESS_EXIT;
 exports.STOP_REASON_PROCESS_SIGHUP = STOP_REASON_PROCESS_SIGHUP;
 exports.STOP_REASON_PROCESS_SIGINT = STOP_REASON_PROCESS_SIGINT;
 exports.STOP_REASON_PROCESS_SIGTERM = STOP_REASON_PROCESS_SIGTERM;
-exports.acceptsContentType = acceptsContentType;
 exports.composeResponse = composeResponse;
 exports.convertFileSystemErrorToResponseProperties = convertFileSystemErrorToResponseProperties;
 exports.createSSERoom = createSSERoom;
@@ -3537,12 +3117,17 @@ exports.fetchUrl = fetchUrl;
 exports.findFreePort = findFreePort;
 exports.firstService = firstService;
 exports.firstServiceWithTiming = firstServiceWithTiming;
+exports.headersToObject = headersToObject;
 exports.jsenvAccessControlAllowedHeaders = jsenvAccessControlAllowedHeaders;
 exports.jsenvAccessControlAllowedMethods = jsenvAccessControlAllowedMethods;
 exports.jsenvCertificate = jsenvCertificate;
 exports.jsenvPrivateKey = jsenvPrivateKey;
 exports.jsenvPublicKey = jsenvPublicKey;
-exports.readRequestBodyAsString = readRequestBodyAsString;
+exports.jsenvServerInternalErrorToResponse = jsenvServerInternalErrorToResponse;
+exports.negotiateContentEncoding = negotiateContentEncoding;
+exports.negotiateContentLanguage = negotiateContentLanguage;
+exports.negotiateContentType = negotiateContentType;
+exports.readRequestBody = readRequestBody;
 exports.serveFile = serveFile;
 exports.startServer = startServer;
 exports.timeFunction = timeFunction;
