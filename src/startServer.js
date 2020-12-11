@@ -353,10 +353,8 @@ ${requestAcceptHeader}`)
         response.headers["content-length"] > 0 &&
         response.body === ""
       ) {
-        logger.error(
-          createContentLengthMismatchError(
-            `content-length header is ${response.headers["content-length"]} but body is empty`,
-          ),
+        logger.warn(
+          `content-length header is ${response.headers["content-length"]} but body is empty`,
         )
       }
 
@@ -500,13 +498,6 @@ ${request.method} ${request.origin}${request.ressource}`)
 }
 
 const statusToStatusText = (status) => STATUS_CODES[status] || "not specified"
-
-const createContentLengthMismatchError = (message) => {
-  const error = new Error(message)
-  error.code = "CONTENT_LENGTH_MISMATCH"
-  error.name = error.code
-  return error
-}
 
 // https://www.w3.org/TR/cors/
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
