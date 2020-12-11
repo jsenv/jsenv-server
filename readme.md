@@ -225,7 +225,7 @@ const noContentService = (request) => {
   return { status: 204 }
 }
 
-const okService = () => {
+const okService = (request) => {
   if (request.ressource !== "/whatever") return null
   return { status: 200 }
 }
@@ -677,7 +677,7 @@ const noContentService = (request) => {
   return { status: 204 }
 }
 
-const okService = () => {
+const okService = (request) => {
   if (request.ressource !== "/whatever") return null
   return { status: 200 }
 }
