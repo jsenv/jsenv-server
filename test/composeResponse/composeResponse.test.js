@@ -50,3 +50,61 @@ import { composeResponse } from "../../index.js"
   }
   assert({ actual, expected })
 }
+
+{
+  const response = composeResponse(
+    {
+      headers: {
+        eTag: "toto",
+      },
+    },
+    {
+      headers: {},
+    },
+  )
+  const actual = response.headers
+  const expected = {
+    etag: "toto",
+  }
+  assert({ actual, expected })
+}
+
+{
+  const response = composeResponse(
+    {
+      headers: {
+        etag: "foo",
+      },
+    },
+    {
+      headers: {
+        eTag: "bar",
+      },
+    },
+  )
+  const actual = response.headers
+  const expected = {
+    etag: "bar",
+  }
+  assert({ actual, expected })
+}
+
+{
+  const response = composeResponse(
+    {
+      headers: {
+        eTag: "foo",
+      },
+    },
+    {
+      headers: {
+        etag: "bar",
+      },
+    },
+  )
+  const actual = response.headers
+  const expected = {
+    etag: "bar",
+  }
+  assert({ actual, expected })
+}

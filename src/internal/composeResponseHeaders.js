@@ -27,5 +27,5 @@ const headerCompositionMapping = {
 export const composeResponseHeaders = compositionMappingToCompose(
   headerCompositionMapping,
   () => ({}),
-  { lowercase: true },
+  { caseSensitive: false },
 )
