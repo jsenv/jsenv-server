@@ -403,17 +403,17 @@ const fileUrlToReadableStream = (fileUrl) => {
 }
 
 const availableCompressionFormats = {
-  brotli: async (fileReadableStream) => {
-    const { createGzip } = await import("zlib")
-    return fileReadableStream.pipe(createGzip())
+  br: async (fileReadableStream) => {
+    const { createBrotliCompress } = await import("zlib")
+    return fileReadableStream.pipe(createBrotliCompress())
   },
   deflate: async (fileReadableStream) => {
     const { createDeflate } = await import("zlib")
     return fileReadableStream.pipe(createDeflate())
   },
   gzip: async (fileReadableStream) => {
-    const { createBrotliCompress } = await import("zlib")
-    return fileReadableStream.pipe(createBrotliCompress())
+    const { createGzip } = await import("zlib")
+    return fileReadableStream.pipe(createGzip())
   },
 }
 
