@@ -15,7 +15,7 @@ High level api for node.js server.
 - [Services and composition](#Services-and-composition)
 - [Server internal error](#Server-internal-error)
 - [Serving files](#Serving-files)
-- [Content type negotiation](#Content-type-negotiation)
+- [Content negotiation](#Content-negotiation)
 - [Access control (CORS)](#Access-control-CORS)
 - [Protocol and certificate](#Protocol-and-certificate)
 - [Server timing](#Server-timing)
@@ -470,9 +470,9 @@ startServer({
 
 </details>
 
-# Content type negotiation
+# Content negotiation
 
-You can use `negotiateContentType` to respond requests prefered content-type.
+You can use `negotiateContentType` to respond with request prefered content type.
 
 <details>
   <summary>Code using content type negotiation</summary>
@@ -516,6 +516,14 @@ const availableContentTypes = {
   },
 }
 ```
+
+You can use `negotiateContentLanguage` to respond with request prefered language.
+
+TODO
+
+You can use `negotiateContentEncoding` to respond with request prefered encoding.
+
+TODO
 
 </details>
 
