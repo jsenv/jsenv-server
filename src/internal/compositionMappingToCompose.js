@@ -1,9 +1,15 @@
-export const compositionMappingToCompose = (compositionMapping, createInitial = () => ({})) => {
-  const reducer = compositionMappingToReducer(compositionMapping)
+export const compositionMappingToCompose = (
+  compositionMapping,
+  createInitial = () => {
+    return {}
+  },
+  { lowercase = false } = {},
+) => {
+  const reducer = compositionMappingToReducer(compositionMapping, { lowercase })
   return (...objects) => objects.reduce(reducer, createInitial())
 }
 
-const compositionMappingToReducer = (compositionMapping) => {
+const compositionMappingToReducer = (compositionMapping, { lowercase }) => {
   const composeProperty = (key, previous, current) => {
     const propertyExistInCurrent = key in current
     if (!propertyExistInCurrent) return previous[key]
@@ -21,8 +27,13 @@ const compositionMappingToReducer = (compositionMapping) => {
   return (previous, current) => {
     if (typeof current !== "object" || current === null) return previous
 
-    const composed = { ...previous }
+    const composed = {}
+    Object.keys(previous).forEach((key) => {
+      if (lowercase) key = key.toLowerCase()
+      composed[key] = previous[key]
+    })
     Object.keys(current).forEach((key) => {
+      if (lowercase) key = key.toLowerCase()
       composed[key] = composeProperty(key, previous, current)
     })
     return composed

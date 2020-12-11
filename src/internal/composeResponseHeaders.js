@@ -24,4 +24,8 @@ const headerCompositionMapping = {
   "vary": composeHeaderValues,
 }
 
-export const composeResponseHeaders = compositionMappingToCompose(headerCompositionMapping)
+export const composeResponseHeaders = compositionMappingToCompose(
+  headerCompositionMapping,
+  () => ({}),
+  { lowercase: true },
+)
