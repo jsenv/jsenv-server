@@ -15,7 +15,7 @@ High level api for node.js server.
 - [Services and composition](#Services-and-composition)
 - [Server internal error](#Server-internal-error)
 - [Serving files](#Serving-files)
-- [Content type negotiation](#Content-type-negotiation)
+- [Content negotiation](#Content-negotiation)
 - [Access control (CORS)](#Access-control-CORS)
 - [Protocol and certificate](#Protocol-and-certificate)
 - [Server timing](#Server-timing)
@@ -364,7 +364,7 @@ startServer({
 
 </details>
 
-You can configured how `serveFile` handle cache and content types.
+`serveFile` can be configured to handle cache, compression and content types.
 
 ## Configuring served files cache
 
@@ -443,6 +443,31 @@ startServer({
 
 </details>
 
+## Configuring served files compression
+
+When compression is enabled `serveFile` reads request `accept-encoding` header and uses a compression format if possible. It uses content encoding negotiation documented in [Content negotiation](#Content-negotiation) part. The available compression formats are `gzip`, `brotli` and `deflate`. One (or none) is picked according to the `accept-encoding` request header. To enable compression, use `compressionEnabled` and `compressionSizeThreshold` parameter.
+
+<details>
+  <summary>File compression code example</summary>
+
+```js
+import { startServer, serveFile } from "@jsenv/server"
+
+const rootDirectoryUrl = new URL("./", import.meta.url)
+
+startServer({
+  requestToResponse: (request) => {
+    return serveFile(request, {
+      rootDirectoryUrl,
+      compressionEnabled: true,
+      compressionSizeThreshold: 1024,
+    })
+  },
+})
+```
+
+</details>
+
 ## Configuring served files content type
 
 Jsenv uses file extension to decide the content-type response header. The default content type mapping exported in [src/jsenvContentTypeMap.js](./src/jsenvContentTypeMap.js) contains well known content types used in the web. If one is missing, please submit a pull request to add it. It's also possible to override or extend this mapping using `contentTypeMap` parameter.
@@ -470,12 +495,12 @@ startServer({
 
 </details>
 
-# Content type negotiation
+# Content negotiation
 
-You can use `negotiateContentType` to respond requests prefered content-type.
+You can use `negotiateContentType` to respond with request prefered content type.
 
 <details>
-  <summary>Code using content type negotiation</summary>
+  <summary>Content type negotiation code example</summary>
 
 ```js
 import { negotiateContentType, startServer } from "@jsenv/server"
@@ -506,6 +531,99 @@ const availableContentTypes = {
   },
   "text/plain": () => {
     const body = `Hello world`
+    return {
+      headers: {
+        "content-type": "text/plain",
+        "content-length": Buffer.byteLength(body),
+      },
+      body,
+    }
+  },
+}
+```
+
+</details>
+
+You can use `negotiateContentLanguage` to respond with request prefered language.
+
+<details>
+  <summary>Language negotiation code example</summary>
+
+```js
+import { negotiateContentLanguage, startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: (request) => {
+    return respondWithBestLanguage(request)
+  },
+})
+
+const respondWithBestLanguage = (request) => {
+  const bestLanguage = negotiateContentLanguage(request, Object.keys(availableLanguages))
+  return availableLanguages[bestLanguage || "en"]()
+}
+
+const availableLanguages = {
+  fr: () => {
+    const body = "Bonjour tout le monde !"
+    return {
+      headers: {
+        "content-type": "text/plain",
+        "content-length": Buffer.byteLength(body),
+        "content-language": "fr",
+      },
+      body,
+    }
+  },
+  en: () => {
+    const body = `Hello world!`
+    return {
+      headers: {
+        "content-type": "text/plain",
+        "content-length": Buffer.byteLength(body),
+        "content-language": "en",
+      },
+      body,
+    }
+  },
+}
+```
+
+</details>
+
+You can use `negotiateContentEncoding` to respond with request prefered encoding.
+
+<details>
+  <summary>Content encoding negotiation code example</summary>
+
+```js
+import { gzipSync } from "zlib"
+import { negotiateContentEncoding, startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: (request) => {
+    return respondWithAcceptedEncoding(request)
+  },
+})
+
+const respondWithAcceptedEncoding = (request) => {
+  const acceptedEncoding = negotiateContentEncoding(request, Object.keys(availableEncodings))
+  return availableEncodings[acceptedEncoding || "identity"]()
+}
+
+const availableEncodings = {
+  gzip: () => {
+    const body = gzipSync(Buffer.from(`Hello world!`))
+    return {
+      headers: {
+        "content-type": "text/plain",
+        "content-encoding": "gzip",
+      },
+      body,
+    }
+  },
+  identity: () => {
+    const body = "Hello world!"
     return {
       headers: {
         "content-type": "text/plain",

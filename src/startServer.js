@@ -41,7 +41,7 @@ import { findFreePort } from "./findFreePort.js"
 import { trackServerRequest } from "./internal/trackServerRequest.js"
 import { timeFunction, timingToServerTimingResponseHeaders } from "./serverTiming.js"
 import { jsenvServerInternalErrorToResponse } from "./jsenvServerInternalErrorToResponse.js"
-import { negotiateContentType } from "./negotiateContentType.js"
+import { checkContentNegotiation } from "./internal/checkContentNegotiation.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -99,6 +99,7 @@ ${JSON.stringify(request.headers, null, "  ")}
 `,
     )
   },
+  contentNegotiationWarnings = true,
 
   startedCallback = () => {},
   stoppedCallback = () => {},
@@ -312,18 +313,8 @@ ${error.stack}`)
           response.headers,
         )
 
-        const requestAcceptHeader = request.headers.accept
-        const responseContentTypeHeader = response.headers["content-type"]
-        if (
-          requestAcceptHeader &&
-          responseContentTypeHeader &&
-          !negotiateContentType(request, [responseContentTypeHeader])
-        ) {
-          logger.warn(`response content type is not in the request accepted content types.
---- response content-type header ---
-${responseContentTypeHeader}
---- request accept header ---
-${requestAcceptHeader}`)
+        if (contentNegotiationWarnings) {
+          checkContentNegotiation(request, response, { warn: logger.warn })
         }
       }
 

@@ -9,6 +9,8 @@ export { jsenvAccessControlAllowedHeaders } from "./src/jsenvAccessControlAllowe
 export { jsenvAccessControlAllowedMethods } from "./src/jsenvAccessControlAllowedMethods.js"
 export { jsenvServerInternalErrorToResponse } from "./src/jsenvServerInternalErrorToResponse.js"
 export { jsenvPrivateKey, jsenvPublicKey, jsenvCertificate } from "./src/jsenvSignature.js"
+export { negotiateContentEncoding } from "./src/negotiateContentEncoding.js"
+export { negotiateContentLanguage } from "./src/negotiateContentLanguage.js"
 export { negotiateContentType } from "./src/negotiateContentType.js"
 export { urlToContentType } from "./src/urlToContentType.js"
 export { urlToSearchParamValue } from "./src/urlToSearchParamValue.js"

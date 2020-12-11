@@ -1,4 +1,5 @@
-import { parseAcceptHeader } from "./internal/header-accept.js"
+import { applyContentNegotiation } from "./internal/applyContentNegotiation.js"
+import { parseMultipleHeader } from "./internal/multiple-header.js"
 
 export const negotiateContentType = (request, availableContentTypes) => {
   const { headers = {} } = request
@@ -8,73 +9,50 @@ export const negotiateContentType = (request, availableContentTypes) => {
   }
 
   const contentTypesAccepted = parseAcceptHeader(requestAcceptHeader)
+  return applyContentNegotiation({
+    accepteds: contentTypesAccepted,
+    availables: availableContentTypes,
+    getAcceptanceScore: getContentTypeAcceptanceScore,
+  })
+}
 
-  const availableContentTypesAcceptResults = availableContentTypes.map((availableContentType) => {
-    return acceptsContentType({
-      contentTypesAccepted,
-      contentType: availableContentType,
+const parseAcceptHeader = (acceptHeader) => {
+  const acceptHeaderObject = parseMultipleHeader(acceptHeader, {
+    validateProperty: ({ name }) => {
+      // read only q, anything else is ignored
+      return name === "q"
+    },
+  })
+
+  const accepts = []
+  Object.keys(acceptHeaderObject).forEach((key) => {
+    const { q = 1 } = acceptHeaderObject[key]
+    const value = key
+    accepts.push({
+      value,
+      quality: q,
     })
   })
-  const bestAcceptResult = getBestAcceptResult(availableContentTypesAcceptResults)
-
-  if (bestAcceptResult.accepted) {
-    const index = availableContentTypesAcceptResults.indexOf(bestAcceptResult)
-    const bestAcceptedAvailableContentType = availableContentTypes[index]
-    return bestAcceptedAvailableContentType
-  }
-
-  return null
-}
-
-const acceptsContentType = ({ contentTypesAccepted, contentType }) => {
-  const acceptResults = contentTypesAccepted.map((contentTypeAccepted) => {
-    const accepted = typeMatches(contentType, contentTypeAccepted.type)
-    return {
-      accepted,
-      score: contentTypeAccepted.quality,
-    }
+  accepts.sort((a, b) => {
+    return b.quality - a.quality
   })
-
-  return getBestAcceptResult(acceptResults)
+  return accepts
 }
 
-const typeMatches = (type, pattern) => {
-  const typeComposition = decomposeType(type)
-  const patternComposition = decomposeType(pattern)
+const getContentTypeAcceptanceScore = ({ value, quality }, availableContentType) => {
+  const [acceptedType, acceptedSubtype] = decomposeContentType(value)
+  const [availableType, availableSubtype] = decomposeContentType(availableContentType)
 
-  if (patternComposition.type === "*") {
-    if (patternComposition.subtype === "*") return true
-    return patternComposition.subtype === typeComposition.subtype
+  const typeAccepted = acceptedType === "*" || acceptedType === availableType
+  const subtypeAccepted = acceptedSubtype === "*" || acceptedSubtype === availableSubtype
+
+  if (typeAccepted && subtypeAccepted) {
+    return quality
   }
-  if (patternComposition.type === typeComposition.type) {
-    if (patternComposition.subtype === "*") return true
-    return patternComposition.subtype === typeComposition.subtype
-  }
-  return false
+  return -1
 }
 
-const decomposeType = (fullType) => {
-  const parts = fullType.split("/")
-  const type = parts[0]
-  const subtype = parts[1]
-  return { type, subtype }
-}
-
-const getBestAcceptResult = (acceptResults) => {
-  const bestAcceptsResult = acceptResults.reduce(
-    (previous, acceptResult) => {
-      if (!acceptResult.accepted) {
-        return previous
-      }
-      if (previous.score >= acceptResult.score) {
-        return previous
-      }
-      return acceptResult
-    },
-    {
-      accepted: false,
-      score: -1,
-    },
-  )
-  return bestAcceptsResult
+const decomposeContentType = (fullType) => {
+  const [type, subtype] = fullType.split("/")
+  return [type, subtype]
 }

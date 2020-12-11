@@ -15,6 +15,7 @@ import { convertFileSystemErrorToResponseProperties } from "./convertFileSystemE
 import { urlToContentType } from "./urlToContentType.js"
 import { jsenvContentTypeMap } from "./jsenvContentTypeMap.js"
 import { composeResponse } from "./composeResponse.js"
+import { negotiateContentEncoding } from "./negotiateContentEncoding.js"
 
 const { readFile } = promises
 
@@ -29,6 +30,8 @@ export const serveFile = async (
     etagEnabled = false,
     etagCacheDisabled = false,
     mtimeEnabled = false,
+    compressionEnabled = false,
+    compressionSizeThreshold = 1024,
     cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
     canReadDirectory = false,
     readableStreamLifetimeInSeconds = 5,
@@ -184,27 +187,39 @@ export const serveFile = async (
       )
     }
 
-    const rawResponse = await getRawResponse(request, {
-      sourceStat,
-      sourceUrl,
-      contentTypeMap,
-    })
+    let response
+    if (compressionEnabled && sourceStat.size >= compressionSizeThreshold) {
+      const compressedResponse = await getCompressedResponse(request, {
+        sourceUrl,
+        contentTypeMap,
+      })
+      if (compressedResponse) {
+        response = compressedResponse
+      }
+    }
+    if (!response) {
+      response = await getRawResponse(request, {
+        sourceStat,
+        sourceUrl,
+        contentTypeMap,
+      })
+    }
 
-    if (rawResponse.body) {
+    if (response.body) {
       // do not keep readable stream opened on that file
       // otherwise file is kept open forever.
       // moreover it will prevent to unlink the file on windows.
       if (clientCacheResponse.body) {
-        rawResponse.body.destroy()
+        response.body.destroy()
       } else if (readableStreamLifetimeInSeconds && readableStreamLifetimeInSeconds !== Infinity) {
         // safe measure, ensure the readable stream gets used in the next ${readableStreamLifetimeInSeconds} otherwise destroys it
         const timeout = setTimeout(() => {
           console.warn(
             `readable stream on ${sourceUrl} still unused after ${readableStreamLifetimeInSeconds} seconds -> destroying it to release file handle`,
           )
-          rawResponse.body.destroy()
+          response.body.destroy()
         }, readableStreamLifetimeInSeconds * 1000)
-        onceReadableStreamUsedOrClosed(rawResponse.body, () => {
+        onceReadableStreamUsedOrClosed(response.body, () => {
           clearTimeout(timeout)
         })
       }
@@ -223,7 +238,7 @@ export const serveFile = async (
           // ...(headers["cache-control"] === "no-store" ? { "cache-control": "no-store" } : {}),
         },
       },
-      rawResponse,
+      response,
       clientCacheResponse,
     )
   } catch (e) {
@@ -360,6 +375,48 @@ const getMtimeResponse = async (request, { sourceStat }) => {
   }
 }
 
+const getCompressedResponse = async (request, { sourceUrl, contentTypeMap }) => {
+  const acceptedCompressionFormat = negotiateContentEncoding(
+    request,
+    Object.keys(availableCompressionFormats),
+  )
+  if (!acceptedCompressionFormat) {
+    return null
+  }
+
+  const fileReadableStream = fileUrlToReadableStream(sourceUrl)
+  const body = await availableCompressionFormats[acceptedCompressionFormat](fileReadableStream)
+
+  return {
+    status: 200,
+    headers: {
+      "content-type": urlToContentType(sourceUrl, contentTypeMap),
+      "content-encoding": acceptedCompressionFormat,
+      "vary": "accept-encoding",
+    },
+    body,
+  }
+}
+
+const fileUrlToReadableStream = (fileUrl) => {
+  return createReadStream(urlToFileSystemPath(fileUrl), { emitClose: true })
+}
+
+const availableCompressionFormats = {
+  br: async (fileReadableStream) => {
+    const { createBrotliCompress } = await import("zlib")
+    return fileReadableStream.pipe(createBrotliCompress())
+  },
+  deflate: async (fileReadableStream) => {
+    const { createDeflate } = await import("zlib")
+    return fileReadableStream.pipe(createDeflate())
+  },
+  gzip: async (fileReadableStream) => {
+    const { createGzip } = await import("zlib")
+    return fileReadableStream.pipe(createGzip())
+  },
+}
+
 const getRawResponse = async (request, { sourceStat, sourceUrl, contentTypeMap }) => {
   return {
     status: 200,
@@ -367,7 +424,7 @@ const getRawResponse = async (request, { sourceStat, sourceUrl, contentTypeMap }
       "content-type": urlToContentType(sourceUrl, contentTypeMap),
       "content-length": sourceStat.size,
     },
-    body: createReadStream(urlToFileSystemPath(sourceUrl), { emitClose: true }),
+    body: fileUrlToReadableStream(sourceUrl),
   }
 }
 
