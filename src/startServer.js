@@ -336,6 +336,12 @@ ${requestAcceptHeader}`)
         return
       }
 
+      if (error && isCancelError(error) && request.cancellationToken.cancellationRequested) {
+        logger.info("ignored because request canceled")
+        nodeResponse.destroy()
+        return
+      }
+
       if (request.aborted) {
         logger.info(`request aborted by client`)
         nodeResponse.destroy()
