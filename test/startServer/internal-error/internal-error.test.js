@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, fetchUrl } from "@jsenv/server"
+import { startServer, fetchUrl, headersToObject } from "@jsenv/server"
 
 // throw a primitive in requestToResponse
 {
@@ -13,12 +13,18 @@ import { startServer, fetchUrl } from "@jsenv/server"
     },
   })
   {
-    const actual = await fetchUrl(origin, {
-      simplified: true,
+    const response = await fetchUrl(origin, {
       headers: {
         accept: "application/json",
       },
     })
+    const actual = {
+      url: response.url,
+      status: response.status,
+      statusText: response.statusText,
+      headers: headersToObject(response.headers),
+      body: await response.text(),
+    }
     const body = JSON.stringify({
       code: "VALUE_THROWED",
       value: "here",
@@ -54,12 +60,18 @@ import { startServer, fetchUrl } from "@jsenv/server"
     },
   })
   {
-    const actual = await fetchUrl(origin, {
-      simplified: true,
+    const response = await fetchUrl(origin, {
       headers: {
         accept: "application/json",
       },
     })
+    const actual = {
+      url: response.url,
+      status: response.status,
+      statusText: response.statusText,
+      headers: headersToObject(response.headers),
+      body: await response.text(),
+    }
     const body = JSON.stringify({
       code: "TEST_CODE",
     })

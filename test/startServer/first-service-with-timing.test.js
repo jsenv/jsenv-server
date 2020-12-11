@@ -23,10 +23,10 @@ const { origin } = await startServer({
 })
 
 {
-  const response = await fetchUrl(origin, { simplified: true })
+  const response = await fetchUrl(origin)
   const actual = {
     status: response.status,
-    timing: parseServerTimingHeader(response.headers["server-timing"]),
+    timing: parseServerTimingHeader(response.headers.get("server-timing")),
   }
   const expected = {
     status: 204,
@@ -45,10 +45,10 @@ const { origin } = await startServer({
 }
 
 {
-  const response = await fetchUrl(`${origin}/whatever`, { simplified: true })
+  const response = await fetchUrl(`${origin}/whatever`)
   const actual = {
     status: response.status,
-    timing: parseServerTimingHeader(response.headers["server-timing"]),
+    timing: parseServerTimingHeader(response.headers.get("server-timing")),
   }
   const expected = {
     status: 200,

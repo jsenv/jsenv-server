@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, fetchUrl } from "../../index.js"
+import { startServer, fetchUrl, headersToObject } from "@jsenv/server"
 
 const { origin, stop } = await startServer({
   logLevel: "off",
@@ -7,7 +7,14 @@ const { origin, stop } = await startServer({
 })
 
 {
-  const actual = await fetchUrl(origin, { simplified: true })
+  const response = await fetchUrl(origin)
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url: `${origin}/`,
     status: 501,

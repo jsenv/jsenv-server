@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, firstService, fetchUrl } from "@jsenv/server"
+import { startServer, firstService, fetchUrl, headersToObject } from "@jsenv/server"
 
 const noContentService = (request) => {
   if (request.ressource !== "/") return null
@@ -18,7 +18,14 @@ const { origin } = await startServer({
 })
 
 {
-  const actual = await fetchUrl(origin, { simplified: true })
+  const response = await fetchUrl(origin)
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url: `${origin}/`,
     status: 204,
@@ -33,7 +40,14 @@ const { origin } = await startServer({
 }
 
 {
-  const actual = await fetchUrl(`${origin}/whatever`, { simplified: true })
+  const response = await fetchUrl(`${origin}/whatever`)
+  const actual = {
+    url: response.url,
+    status: response.status,
+    statusText: response.statusText,
+    headers: headersToObject(response.headers),
+    body: await response.text(),
+  }
   const expected = {
     url: `${origin}/whatever`,
     status: 200,

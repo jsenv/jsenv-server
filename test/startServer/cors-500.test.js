@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, fetchUrl } from "../../index.js"
+import { startServer, fetchUrl, headersToObject } from "@jsenv/server"
 
 const server = await startServer({
   protocol: "http",
@@ -17,8 +17,7 @@ const server = await startServer({
   },
 })
 
-const actual = await fetchUrl(server.origin, {
-  simplified: true,
+const response = await fetchUrl(server.origin, {
   method: "GET",
   headers: {
     "accept": "",
@@ -27,6 +26,13 @@ const actual = await fetchUrl(server.origin, {
     "access-control-request-headers": "x-whatever",
   },
 })
+const actual = {
+  url: response.url,
+  status: response.status,
+  statusText: response.statusText,
+  headers: headersToObject(response.headers),
+  body: await response.text(),
+}
 const body = JSON.stringify({ code: "UNKNOWN_ERROR" })
 const expected = {
   url: `${server.origin}/`,

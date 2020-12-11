@@ -3,6 +3,7 @@ export { convertFileSystemErrorToResponseProperties } from "./src/convertFileSys
 export { createSSERoom } from "./src/createSSERoom.js"
 export { fetchUrl } from "./src/fetchUrl.js"
 export { findFreePort } from "./src/findFreePort.js"
+export { headersToObject } from "./src/headersToObject.js"
 export { firstService, firstServiceWithTiming } from "./src/service-composition.js"
 export { jsenvAccessControlAllowedHeaders } from "./src/jsenvAccessControlAllowedHeaders.js"
 export { jsenvAccessControlAllowedMethods } from "./src/jsenvAccessControlAllowedMethods.js"

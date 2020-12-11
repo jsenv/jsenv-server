@@ -24,14 +24,13 @@ const generateInternalErrorHtmlFile = async (htmlFilename, serverParams) => {
   })
   {
     const response = await fetchUrl(origin, {
-      simplified: true,
       headers: {
         accept: "text/html",
       },
     })
     stop()
     const htmlFileUrl = resolveUrl(htmlFilename, htmlFilesDirectoryUrl)
-    await writeFile(htmlFileUrl, response.body)
+    await writeFile(htmlFileUrl, await response.text())
   }
 }
 

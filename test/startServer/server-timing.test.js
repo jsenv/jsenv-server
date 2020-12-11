@@ -21,8 +21,8 @@ const { origin } = await startServer({
 })
 
 {
-  const response = await fetchUrl(origin, { simplified: true })
-  const actual = parseServerTimingHeader(response.headers["server-timing"])
+  const response = await fetchUrl(origin)
+  const actual = parseServerTimingHeader(response.headers.get("server-timing"))
   const expected = {
     a: {
       description: "waiting 50ms",
