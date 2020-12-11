@@ -33,14 +33,17 @@ export const timeFunction = (name, fn) => {
 // so response can return a new timing object
 // yes it's awful, feel free to PR with a better approach :)
 export const timingToServerTimingResponseHeaders = (timing) => {
-  const serverTimingValue = Object.keys(timing)
-    .map((key, index) => {
-      const time = timing[key]
-      return `${letters[index] || "zz"};desc="${key}";dur=${time}`
-    })
-    .join(", ")
+  const serverTimingHeader = {}
+  Object.keys(timing).forEach((key, index) => {
+    const name = letters[index] || "zz"
+    serverTimingHeader[name] = {
+      desc: key,
+      dur: timing[key],
+    }
+  })
+  const serverTimingHeaderString = stringifyServerTimingHeader(serverTimingHeader)
 
-  return { "server-timing": serverTimingValue }
+  return { "server-timing": serverTimingHeaderString }
 }
 
 const letters = [
@@ -74,20 +77,7 @@ const letters = [
 
 export const parseServerTimingHeader = (serverTimingHeaderString) => {
   const serverTimingHeaderObject = parseMultipleHeader(serverTimingHeaderString, {
-    // (),/:;<=>?@[\]{}" Don't allowed
-    // Minimal length is one symbol
-    // Digits, alphabet characters,
-    // and !#$%&'*+-.^_`|~ are allowed
-    // https://www.w3.org/TR/2019/WD-server-timing-20190307/#the-server-timing-header-field
-    // https://tools.ietf.org/html/rfc7230#section-3.2.6
-    validateName: (name) => {
-      const valid = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/gi.test(name)
-      if (!valid) {
-        console.warn(`server timing contains invalid symbols`)
-        return false
-      }
-      return true
-    },
+    validateName: validateServerTimingName,
     validateProperty: ({ name }) => {
       return name === "desc" || name === "dur"
     },
@@ -105,5 +95,22 @@ export const parseServerTimingHeader = (serverTimingHeaderString) => {
 }
 
 export const stringifyServerTimingHeader = (serverTimingHeader) => {
-  return stringifyMultipleHeader(serverTimingHeader)
+  return stringifyMultipleHeader(serverTimingHeader, {
+    validateName: validateServerTimingName,
+  })
+}
+
+// (),/:;<=>?@[\]{}" Don't allowed
+// Minimal length is one symbol
+// Digits, alphabet characters,
+// and !#$%&'*+-.^_`|~ are allowed
+// https://www.w3.org/TR/2019/WD-server-timing-20190307/#the-server-timing-header-field
+// https://tools.ietf.org/html/rfc7230#section-3.2.6
+const validateServerTimingName = (name) => {
+  const valid = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/gi.test(name)
+  if (!valid) {
+    console.warn(`server timing contains invalid symbols`)
+    return false
+  }
+  return true
 }
