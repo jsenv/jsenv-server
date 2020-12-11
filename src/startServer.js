@@ -12,10 +12,9 @@ import {
   executeAsyncFunction,
 } from "@jsenv/cancellation"
 import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-signals"
-import { memoize } from "@jsenv/util"
+import { memoize, urlToOrigin } from "@jsenv/util"
 import { createLogger } from "@jsenv/logger"
 import { createTracker } from "./internal/createTracker.js"
-import { urlToOrigin } from "./internal/urlToOrigin.js"
 import { createServer } from "./internal/createServer.js"
 import { trackServerPendingConnections } from "./internal/trackServerPendingConnections.js"
 import { trackServerPendingRequests } from "./internal/trackServerPendingRequests.js"
