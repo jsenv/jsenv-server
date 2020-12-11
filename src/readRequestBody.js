@@ -1,7 +1,7 @@
-export const readRequestBody = (body, { as = "string" } = {}) => {
+export const readRequestBody = (request, { as = "string" } = {}) => {
   return new Promise((resolve, reject) => {
     const bufferArray = []
-    body.subscribe({
+    request.body.subscribe({
       error: reject,
       next: (buffer) => {
         bufferArray.push(buffer)
