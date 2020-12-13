@@ -108,7 +108,7 @@ import { startServer, readRequestBody } from "@jsenv/server"
 
 startServer({
   requestToResponse: async (request) => {
-    const requestBodyAsString = await readRequestBody(request)
+    const string = await readRequestBody(request)
   },
 })
 ```
@@ -120,7 +120,7 @@ import { startServer, readRequestBody } from "@jsenv/server"
 
 startServer({
   requestToResponse: async (request) => {
-    const requestBodyAsString = await readRequestBody(request, { as: "buffer" })
+    const buffer = await readRequestBody(request, { as: "buffer" })
   },
 })
 ```
@@ -132,7 +132,7 @@ import { startServer, readRequestBody } from "@jsenv/server"
 
 startServer({
   requestToResponse: async (request) => {
-    const requestBodyAsString = await readRequestBody(request, { as: "json" })
+    const json = await readRequestBody(request, { as: "json" })
   },
 })
 ```
@@ -368,9 +368,11 @@ startServer({
 
 ## Configuring served files cache
 
-When server receives a request it can decids to respond with `304 Not modified` and an empty response body instead of `200 OK` and file content in the response body. By default `serveFile` will always respond with `200`. You can enable cache using either `etag` or `mtime` based caching.
+When server receives a request it can decids to respond with `304 Not modified` instead of `200 OK`. A `304` status tells the client it can use its cached version of the response. Consequently `304` responses have an empty body while `200` contains the file content.
 
-> `mtime` is faster than `etag` but less reobust because it assumes filesystem dates are reliable.
+By default `serveFile` will always respond with `200`. You can unlock `304` responses using either `etag` or `mtime` based caching.
+
+> `mtime` less robust then `etag` because it assumes filesystem dates are reliable.
 
 <details>
   <summary>Etag headers</summary>
@@ -699,7 +701,7 @@ Use this parameter to allowed any request headers.
 
 # Protocol and certificate
 
-`startServer` starts a server in https by default. It uses a self signed certificate to do so. You can [pass your own certificate](#pass-your-own-certificate). It's also possible to disable https using [protocol parameter](#protocol).
+`startServer` starts a server in https by default without asking you to provide an https certificate. A default certificate is used and can be found in [src/jsenvSignature.js](./src/jsenvSignature.js). If you don't want to create and [pass your own certificate](#pass-your-own-certificate), you should trust the one in [src/jsenvSignature.js](./src/jsenvSignature.js). It's also possible to disable https using [protocol parameter](#protocol).
 
 ## Trusting jsenv certificate
 
@@ -716,8 +718,6 @@ The certificate to trust is `jsenvRootCertificate` in [src/jsenvSignature.js](./
 > If you need a file with the jsenv certificate create a `whatever.crt` file and copy paste `jsenvRootCertificate` value in it.
 
 ## Using a custom certificate
-
-If you don't have a certificate you can omit the `privateKey` and `certificate` parameters and a default certificate will be used. It can be found inside [src/jsenvSignature.js](./src/jsenvSignature.js). You should trust this certificate in your system/browser settings.
 
 <details>
   <summary>Code using a custom certificate</summary>
