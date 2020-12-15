@@ -34,7 +34,7 @@ export const serveFile = async (
     compressionSizeThreshold = 1024,
     cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
     canReadDirectory = false,
-    readableStreamLifetimeInSeconds = 5,
+    readableStreamLifetimeInSeconds = 120,
   } = {},
 ) => {
   try {
