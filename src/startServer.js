@@ -132,7 +132,7 @@ ${JSON.stringify(request.headers, null, "  ")}
     }
 
     const logger = createLogger({ logLevel })
-    if (redirectHttpToHttps === undefined && protocol === "https" && !http2) {
+    if (redirectHttpToHttps === undefined && protocol === "https") {
       redirectHttpToHttps = true
     }
     if (redirectHttpToHttps && protocol === "http") {
@@ -277,7 +277,7 @@ ${JSON.stringify(request.headers, null, "  ")}
       }
       if (redirectHttpToHttps && !nodeRequest.connection.encrypted) {
         nodeResponse.writeHead(301, {
-          location: `${serverOrigin}${nodeRequest.ressource}`,
+          location: `${serverOrigin}${nodeRequest.url}`,
         })
         nodeResponse.end()
         return
