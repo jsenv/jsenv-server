@@ -1,7 +1,7 @@
 /* eslint-disable import/max-dependencies */
 
 import { createRequire } from "module"
-import { STATUS_CODES } from "http"
+import http from "http"
 import {
   createCancellationToken,
   createOperation,
@@ -15,7 +15,7 @@ import { SIGINTSignal, unadvisedCrashSignal, teardownSignal } from "@jsenv/node-
 import { memoize, urlToOrigin } from "@jsenv/util"
 import { createLogger } from "@jsenv/logger"
 import { createTracker } from "./internal/createTracker.js"
-import { createServer } from "./internal/createServer.js"
+import { createPolyglotServer } from "./internal/server-polyglot.js"
 import { trackServerPendingConnections } from "./internal/trackServerPendingConnections.js"
 import { trackServerPendingRequests } from "./internal/trackServerPendingRequests.js"
 import { nodeRequestToRequest } from "./internal/nodeRequestToRequest.js"
@@ -37,11 +37,11 @@ import {
 import { jsenvAccessControlAllowedHeaders } from "./jsenvAccessControlAllowedHeaders.js"
 import { jsenvAccessControlAllowedMethods } from "./jsenvAccessControlAllowedMethods.js"
 import { jsenvPrivateKey, jsenvCertificate } from "./jsenvSignature.js"
-import { findFreePort } from "./findFreePort.js"
-import { trackServerRequest } from "./internal/trackServerRequest.js"
+import { listenRequest } from "./internal/listenRequest.js"
 import { timeFunction, timingToServerTimingResponseHeaders } from "./serverTiming.js"
 import { jsenvServerInternalErrorToResponse } from "./jsenvServerInternalErrorToResponse.js"
 import { checkContentNegotiation } from "./internal/checkContentNegotiation.js"
+import { listenServerConnectionError } from "./internal/listenServerConnectionError.js"
 
 const require = createRequire(import.meta.url)
 const killPort = require("kill-port")
@@ -132,17 +132,11 @@ ${JSON.stringify(request.headers, null, "  ")}
     }
 
     const logger = createLogger({ logLevel })
-    if (redirectHttpToHttps === undefined && protocol === "https" && !http2) {
+    if (redirectHttpToHttps === undefined && protocol === "https") {
       redirectHttpToHttps = true
     }
     if (redirectHttpToHttps && protocol === "http") {
       logger.warn(`redirectHttpToHttps ignored because protocol is http`)
-      redirectHttpToHttps = false
-    }
-    if (redirectHttpToHttps && http2) {
-      logger.warn(
-        `redirectHttpToHttps ignored because it does not work with http2. see https://github.com/nodejs/node/issues/23331`,
-      )
       redirectHttpToHttps = false
     }
 
@@ -202,13 +196,15 @@ ${JSON.stringify(request.headers, null, "  ")}
       })
     }
 
-    const nodeServer = await createServer({
-      http2,
-      http1Allowed,
-      protocol,
-      privateKey,
-      certificate,
-    })
+    const nodeServer =
+      protocol === "http"
+        ? http.createServer()
+        : await createPolyglotServer({
+            privateKey,
+            certificate,
+            http2,
+            http1Allowed,
+          })
 
     // https://nodejs.org/api/net.html#net_server_unref
     if (!keepProcessAlive) {
@@ -241,13 +237,11 @@ ${JSON.stringify(request.headers, null, "  ")}
     const startOperation = createStoppableOperation({
       cancellationToken: serverCancellationToken,
       start: async () => {
-        if (portHint) {
-          port = await findFreePort(portHint, { cancellationToken: serverCancellationToken, ip })
-        }
         return listen({
           cancellationToken: serverCancellationToken,
           server: nodeServer,
           port,
+          portHint,
           ip,
         })
       },
@@ -259,13 +253,11 @@ ${JSON.stringify(request.headers, null, "  ")}
     const serverOrigins = getServerOrigins({ protocol, ip, port })
     const serverOrigin = serverOrigins.main
 
+    const removeConnectionErrorListener = listenServerConnectionError(nodeServer, onError)
+    registerCleanupCallback(removeConnectionErrorListener)
+
     const connectionsTracker = trackServerPendingConnections(nodeServer, {
       http2,
-      onConnectionError: (error, connection) => {
-        if (!connection.destroyed) {
-          onError(error)
-        }
-      },
     })
     // opened connection must be shutdown before the close event is emitted
     registerCleanupCallback(connectionsTracker.stop)
@@ -285,8 +277,9 @@ ${JSON.stringify(request.headers, null, "  ")}
       }
       if (redirectHttpToHttps && !nodeRequest.connection.encrypted) {
         nodeResponse.writeHead(301, {
-          location: `${serverOrigin}${nodeRequest.ressource}`,
+          location: `${serverOrigin}${nodeRequest.url}`,
         })
+        nodeResponse.end()
         return
       }
 
@@ -379,7 +372,7 @@ ${request.method} ${request.origin}${request.ressource}`)
       }
     }
 
-    const removeRequestListener = trackServerRequest(nodeServer, requestCallback, { http2 })
+    const removeRequestListener = listenRequest(nodeServer, requestCallback)
     // ensure we don't try to handle new requests while server is stopping
     registerCleanupCallback(removeRequestListener)
 
@@ -487,7 +480,7 @@ ${request.method} ${request.origin}${request.ressource}`)
   })
 }
 
-const statusToStatusText = (status) => STATUS_CODES[status] || "not specified"
+const statusToStatusText = (status) => http.STATUS_CODES[status] || "not specified"
 
 // https://www.w3.org/TR/cors/
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS

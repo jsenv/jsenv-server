@@ -701,7 +701,24 @@ Use this parameter to allowed any request headers.
 
 # Protocol and certificate
 
-`startServer` starts a server in https by default without asking you to provide an https certificate. A default certificate is used and can be found in [src/jsenvSignature.js](./src/jsenvSignature.js). If you don't want to create and [pass your own certificate](#pass-your-own-certificate), you should trust the one in [src/jsenvSignature.js](./src/jsenvSignature.js). It's also possible to disable https using [protocol parameter](#protocol).
+`startServer` starts a server in http by default. To start a server in https use the `protocol` parameter.
+
+<details>
+  <summary>Https server code example</summary>
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  protocol: "https",
+})
+```
+
+</details>
+
+Server will use a default certificate that can be found in [src/jsenvSignature.js](./src/jsenvSignature.js). If you want to use that default certificate you should add it to your trusted certificate. Read more in [Trusting jsenv certificate](#Trusting-jsenv-certificate).
+
+You can also use you certificate. Read more in [Using a custom certificate](#Using-a-custom-certificate)
 
 ## Trusting jsenv certificate
 
@@ -751,9 +768,7 @@ If you use `https` protocol you can provide your own certificate using `privateK
 
 ## redirectHttpToHttps
 
-`redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made receiving in http to https. This parameter is optional and enabled by default.
-
-> This parameter is incompatible with [http2 parameter](#http2). If both are enabled a warning is logged and `redirectHttpToHttps` is ignored.
+`redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made receiving in http to https. This parameter is optional and enabled by default when protocol is `https`.
 
 ## http2
 
