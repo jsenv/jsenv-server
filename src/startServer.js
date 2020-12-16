@@ -139,12 +139,6 @@ ${JSON.stringify(request.headers, null, "  ")}
       logger.warn(`redirectHttpToHttps ignored because protocol is http`)
       redirectHttpToHttps = false
     }
-    if (redirectHttpToHttps && http2) {
-      logger.warn(
-        `redirectHttpToHttps ignored because it does not work with http2. see https://github.com/nodejs/node/issues/23331`,
-      )
-      redirectHttpToHttps = false
-    }
 
     const internalCancellationSource = createCancellationSource()
     const externalCancellationToken = cancellationToken
