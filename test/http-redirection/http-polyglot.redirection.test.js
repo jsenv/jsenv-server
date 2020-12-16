@@ -3,21 +3,22 @@ import { jsenvPrivateKey, jsenvCertificate, fetchUrl } from "@jsenv/server"
 import { headersToObject } from "@jsenv/server/src/headersToObject.js"
 import { listen } from "@jsenv/server/src/internal/listen.js"
 import { createPolyglotServer } from "@jsenv/server/src/internal/server-polyglot.js"
+import { listenRequest } from "@jsenv/server/src/internal/listenRequest.js"
 
-const server = createPolyglotServer({
+const server = await createPolyglotServer({
   privateKey: jsenvPrivateKey,
   certificate: jsenvCertificate,
-  requestHandler: (nodeRequest, nodeResponse) => {
-    if (!nodeRequest.socket.encrypted) {
-      const host = nodeRequest.headers.host || nodeRequest.authority
-      nodeResponse.writeHead(301, { location: `https://${host}${nodeRequest.url}` })
-      nodeResponse.end()
-      return
-    }
+})
+listenRequest(server, (nodeRequest, nodeResponse) => {
+  if (!nodeRequest.socket.encrypted) {
+    const host = nodeRequest.headers.host || nodeRequest.authority
+    nodeResponse.writeHead(301, { location: `https://${host}${nodeRequest.url}` })
+    nodeResponse.end()
+    return
+  }
 
-    nodeResponse.writeHead(200, { "content-Type": "text/plain" })
-    nodeResponse.end("Welcome, HTTPS user!")
-  },
+  nodeResponse.writeHead(200, { "content-Type": "text/plain" })
+  nodeResponse.end("Welcome, HTTPS user!")
 })
 server.unref()
 const port = await listen({

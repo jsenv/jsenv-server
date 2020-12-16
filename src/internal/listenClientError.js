@@ -2,6 +2,7 @@ import { listenEvent } from "./listenEvent.js"
 
 export const listenClientError = (nodeServer, clientErrorCallback) => {
   if (nodeServer._httpServer) {
+    const removeNetClientError = listenEvent(nodeServer, "clientError", clientErrorCallback)
     const removeHttpClientError = listenEvent(
       nodeServer._httpServer,
       "clientError",
@@ -13,6 +14,7 @@ export const listenClientError = (nodeServer, clientErrorCallback) => {
       clientErrorCallback,
     )
     return () => {
+      removeNetClientError()
       removeHttpClientError()
       removeTlsClientError()
     }
