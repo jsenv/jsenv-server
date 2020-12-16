@@ -3,9 +3,10 @@ import { assert } from "@jsenv/assert"
 import { jsenvPrivateKey, jsenvCertificate, fetchUrl } from "@jsenv/server"
 import { headersToObject } from "@jsenv/server/src/headersToObject.js"
 import { listen } from "@jsenv/server/src/internal/listen.js"
-import { createServer, listenClientError } from "./http-polyglot.js"
+import { createPolyglotServer } from "@jsenv/server/src/internal/server-polyglot.js"
+import { listenClientError } from "@jsenv/server/src/internal/listenClientError.js"
 
-const server = createServer({
+const server = createPolyglotServer({
   privateKey: jsenvPrivateKey,
   certificate: jsenvCertificate,
   requestHandler: (request, nodeResponse) => {

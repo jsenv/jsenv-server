@@ -1,3 +1,5 @@
+import { listenRequest } from "./listenRequest.js"
+
 export const trackServerPendingRequests = (nodeServer, { http2 }) => {
   if (http2) {
     // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
@@ -11,22 +13,20 @@ export const trackServerPendingRequests = (nodeServer, { http2 }) => {
 const trackHttp1ServerPendingRequests = (nodeServer) => {
   const pendingClients = new Set()
 
-  const requestListener = (nodeRequest, nodeResponse) => {
+  const removeRequestListener = listenRequest(nodeServer, (nodeRequest, nodeResponse) => {
     const client = { nodeRequest, nodeResponse }
-
     pendingClients.add(client)
     nodeResponse.once("close", () => {
       pendingClients.delete(client)
     })
-  }
+  })
 
-  nodeServer.on("request", requestListener)
-
-  const stop = ({ status, reason }) => {
-    nodeServer.removeListener("request", requestListener)
-
-    return Promise.all(
-      Array.from(pendingClients).map(({ nodeResponse }) => {
+  const stop = async ({ status, reason }) => {
+    removeRequestListener()
+    const pendingClientsArray = Array.from(pendingClients)
+    pendingClients.clear()
+    await Promise.all(
+      pendingClientsArray.map(({ nodeResponse }) => {
         if (nodeResponse.headersSent === false) {
           nodeResponse.writeHead(status, String(reason))
         }
