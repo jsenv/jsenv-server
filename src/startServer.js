@@ -55,6 +55,7 @@ export const startServer = async ({
   http2 = false,
   http1Allowed = true,
   redirectHttpToHttps,
+  allowHttpRequestOnHttps = false,
   ip = "0.0.0.0", // will it work on windows ? https://github.com/nodejs/node/issues/14900
   port = 0, // assign a random available port
   portHint,
@@ -132,12 +133,21 @@ ${JSON.stringify(request.headers, null, "  ")}
     }
 
     const logger = createLogger({ logLevel })
-    if (redirectHttpToHttps === undefined && protocol === "https") {
+    if (redirectHttpToHttps === undefined && protocol === "https" && !allowHttpRequestOnHttps) {
       redirectHttpToHttps = true
     }
     if (redirectHttpToHttps && protocol === "http") {
       logger.warn(`redirectHttpToHttps ignored because protocol is http`)
       redirectHttpToHttps = false
+    }
+    if (allowHttpRequestOnHttps && redirectHttpToHttps) {
+      logger.warn(`redirectHttpToHttps ignored because allowHttpRequestOnHttps is enabled`)
+      redirectHttpToHttps = false
+    }
+
+    if (allowHttpRequestOnHttps && protocol === "http") {
+      logger.warn(`allowHttpRequestOnHttps ignored because protocol is http`)
+      allowHttpRequestOnHttps = false
     }
 
     const internalCancellationSource = createCancellationSource()
@@ -196,15 +206,15 @@ ${JSON.stringify(request.headers, null, "  ")}
       })
     }
 
-    const nodeServer =
-      protocol === "http"
-        ? http.createServer()
-        : await createPolyglotServer({
-            privateKey,
-            certificate,
-            http2,
-            http1Allowed,
-          })
+    const nodeServer = await createNodeServer({
+      protocol,
+      redirectHttpToHttps,
+      allowHttpRequestOnHttps,
+      privateKey,
+      certificate,
+      http2,
+      http1Allowed,
+    })
 
     // https://nodejs.org/api/net.html#net_server_unref
     if (!keepProcessAlive) {
@@ -477,6 +487,35 @@ ${request.method} ${request.origin}${request.ressource}`)
       stop,
       stoppedPromise,
     }
+  })
+}
+
+const createNodeServer = async ({
+  protocol,
+  redirectHttpToHttps,
+  allowHttpRequestOnHttps,
+  privateKey,
+  certificate,
+  http2,
+  http1Allowed,
+}) => {
+  if (protocol === "http") {
+    return http.createServer()
+  }
+
+  if (redirectHttpToHttps || allowHttpRequestOnHttps) {
+    return createPolyglotServer({
+      privateKey,
+      certificate,
+      http2,
+      http1Allowed,
+    })
+  }
+
+  const { createServer } = await import("https")
+  return createServer({
+    key: privateKey,
+    cert: certificate,
   })
 }
 

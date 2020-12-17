@@ -108,3 +108,84 @@ import { headersToObject } from "@jsenv/server/src/headersToObject.js"
     assert({ actual, expected })
   }
 }
+
+// redirection disabled, no http request received
+{
+  const server = await startServer({
+    logLevel: "warn",
+    keepProcessAlive: false,
+    protocol: "https",
+    redirectHttpToHttps: false,
+  })
+
+  // no response on http
+  {
+    const serverHttpOriginUrl = new URL(server.origin)
+    serverHttpOriginUrl.protocol = "http"
+    const serverHttpOrigin = serverHttpOriginUrl.href.slice(0, -1)
+    try {
+      await fetchUrl(serverHttpOrigin, { redirect: "manual" })
+      throw new Error("should throw")
+    } catch (e) {
+      const actual = {
+        code: e.code,
+        message: e.message,
+      }
+      const expected = {
+        code: "ECONNRESET",
+        message: `request to ${serverHttpOrigin}/ failed, reason: socket hang up`,
+      }
+      assert({ actual, expected })
+    }
+  }
+}
+
+// allowHttpRequestOnHttps enabled (means we want to handle http request)
+{
+  const server = await startServer({
+    logLevel: "warn",
+    keepProcessAlive: false,
+    protocol: "https",
+    allowHttpRequestOnHttps: true,
+    requestToResponse: (request) => {
+      return {
+        status: 200,
+        headers: {
+          "content-type": "text/plain",
+        },
+        body: request.origin,
+      }
+    },
+  })
+
+  // request origin is http on http request
+  {
+    const serverHttpOriginUrl = new URL(server.origin)
+    serverHttpOriginUrl.protocol = "http"
+    const serverHttpOrigin = serverHttpOriginUrl.href.slice(0, -1)
+    const response = await fetchUrl(serverHttpOrigin)
+    const actual = {
+      status: response.status,
+      body: await response.text(),
+    }
+    const expected = {
+      status: 200,
+      body: serverHttpOrigin,
+    }
+    assert({ actual, expected })
+  }
+
+  // request origin is https on https requests
+  {
+    const response = await fetchUrl(server.origin, { ignoreHttpsError: true })
+    const actual = {
+      status: response.status,
+      body: await response.text(),
+    }
+    const expected = {
+      status: 200,
+      body: server.origin,
+    }
+    assert({ actual, expected })
+  }
+}

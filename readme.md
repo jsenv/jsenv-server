@@ -770,6 +770,43 @@ If you use `https` protocol you can provide your own certificate using `privateK
 
 `redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made receiving in http to https. This parameter is optional and enabled by default when protocol is `https`.
 
+## allowHttpRequestOnHttps
+
+`allowHttpRequestOnHttps` parameter is a boolean controlling if server will handle `http` request even if started in https. This parameter is optional and disabled by default. When enabled, if a client request server in http, [requestToResponse](#requestToResponse) is called with that http request. In that case `request.origin` can be used to distinguish request protocol.
+
+`allowHttpRequestOnHttps` and `redirectHttpToHttps` are incompatible because:
+
+- Enabling `allowHttpRequestOnHttps` means:
+  > I want to handle request made in http in `requestToResponse`.
+
+- Enabling `redirectHttpToHttps` means:
+  > I want to redirect http request to https.
+
+<details>
+  <summary>allowHttpRequestOnHttps code example</summary>
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  protocol: "https",
+  allowHttpRequestOnHttps: true,
+  requestToResponse: (request) => {
+    const clientUsesHttp = request.origin.startsWith("http")
+
+    return {
+      status: 200,
+      headers: {
+        "content-type": "text/plain",
+      },
+      body: clientUsesHttp ? `Welcome http user` : `Welcome https user`,
+    }
+  },
+})
+```
+
+</details>
+
 ## http2
 
 `http2` parameter is a boolean controlling if server uses http2 or http1. This parameter is optional and disabled by default.
