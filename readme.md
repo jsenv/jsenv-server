@@ -341,7 +341,7 @@ startServer({
 
 A server often needs to serve file without routing logic. Either the file is there and server sends it, or it responds with a 404 status code. You can use `serveFile` exports to do that.
 
-`serveFile` is an async function that will search for a file on your filesysten and produce a response for it.
+`serveFile` is an async function that will search for a file on your filesystem and produce a response for it.
 
 <details>
   <summary>Serve file code example</summary>
@@ -372,7 +372,7 @@ When server receives a request it can decids to respond with `304 Not modified` 
 
 By default `serveFile` will always respond with `200`. You can unlock `304` responses using either `etag` or `mtime` based caching.
 
-> `mtime` less robust then `etag` because it assumes filesystem dates are reliable.
+> `mtime` is less robust then `etag` because it assumes filesystem dates are reliable.
 
 <details>
   <summary>Etag headers</summary>
@@ -418,7 +418,7 @@ startServer({
 
 </details>
 
-It is also possible to configure `cache-control` response header value using `cacheControl` parameter. Remove more about this header at https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control.
+It is also possible to configure `cache-control` response header value using `cacheControl` parameter. Read more about this header at https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control.
 
 > In dev you likely don't want to enable cache-control headers.
 
@@ -777,6 +777,7 @@ If you use `https` protocol you can provide your own certificate using `privateK
 `allowHttpRequestOnHttps` and `redirectHttpToHttps` are incompatible because:
 
 - Enabling `allowHttpRequestOnHttps` means:
+
   > I want to handle request made in http in `requestToResponse`.
 
 - Enabling `redirectHttpToHttps` means:
@@ -819,20 +820,25 @@ startServer({
 
 # Server timing
 
-Server timing consists into sending headers in the response concerning the server performances. When looking at network panel in chrome devtools you can find a metric called TTFB (Time To First Byte). Without server timing you won't be able to know what your server was doing during that period.
+Server timing consists into sending headers in the response concerning the server performances. When looking at network panel in chrome devtools you can find a metric called TTFB (Time To First Byte). Without server timing you won't be able to know what your server was doing during that period. Read more in https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing
 
 <details>
-  <summary>Screenshots of chrome devtools</summary>
+  <summary>Screenshot TTFB in chrome devtools</summary>
+
+> Chrome devtools are saying TTFB took 45.80ms.
 
 ![screenshot of chrome devtools TTFB](./docs/screenshot-devtools-TTFB.png)
 
-![screenshot of chrome devtools server timing](./docs/screenshot-devtools-timing.png)
-
-Thanks to server timing you know what was going on during these `45.80ms`: `43.16ms` were needed by something called `service:compiled files`.
-
 </details>
 
-Read more in https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing
+<details>
+    <summary>Screenshot server timing in chrome devtools</summary>
+
+> Server timing tells chrome devtools what server was doing during `45.80ms`: `43.16ms` were needed by something called `service:compiled files`.
+
+![screenshot of chrome devtools server timing](./docs/screenshot-devtools-timing.png)
+
+</details>
 
 You can track each service timing by replacing `firstService` usage seen in [Services and composition](#Services-and-composition) by `firstServiceWithTiming`. It will measure time taken by each function for you.
 
