@@ -17,6 +17,8 @@ var stream = require('stream');
 var os = require('os');
 var url$1 = require('url');
 
+function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
+
 function _interopNamespace(e) {
   if (e && e.__esModule) return e;
   var n = Object.create(null);
@@ -36,6 +38,9 @@ function _interopNamespace(e) {
   n['default'] = e;
   return Object.freeze(n);
 }
+
+var net__default = /*#__PURE__*/_interopDefaultLegacy(net);
+var http__default = /*#__PURE__*/_interopDefaultLegacy(http);
 
 const compositionMappingToComposeStrict = (compositionMapping, createInitial = () => ({})) => {
   const reducer = compositionMappingToStrictReducer(compositionMapping);
@@ -1009,7 +1014,7 @@ const serveFile = async (request, {
   compressionSizeThreshold = 1024,
   cacheControl = etagEnabled || mtimeEnabled ? "private,max-age=0,must-revalidate" : "no-store",
   canReadDirectory = false,
-  readableStreamLifetimeInSeconds = 5
+  readableStreamLifetimeInSeconds = 120
 } = {}) => {
   try {
     rootDirectoryUrl = util.assertAndNormalizeDirectoryUrl(rootDirectoryUrl);
@@ -1600,14 +1605,25 @@ const listen = ({
   cancellationToken,
   server,
   port,
+  portHint,
   ip
 }) => {
   return cancellation.createStoppableOperation({
     cancellationToken,
-    start: () => startListening(server, port, ip),
+    start: async () => {
+      if (portHint) {
+        port = await findFreePort(portHint, {
+          cancellationToken,
+          ip
+        });
+      }
+
+      return startListening(server, port, ip);
+    },
     stop: () => stopListening(server)
   });
 };
+
 const startListening = (server, port, ip) => new Promise((resolve, reject) => {
   server.on("error", reject);
   server.on("listening", () => {
@@ -1617,6 +1633,7 @@ const startListening = (server, port, ip) => new Promise((resolve, reject) => {
   });
   server.listen(port, ip);
 });
+
 const stopListening = server => new Promise((resolve, reject) => {
   server.on("error", reject);
   server.on("close", resolve);
@@ -2024,110 +2041,188 @@ callback: ${callback}`);
   };
 };
 
-const createServer = async ({
-  http2,
-  http1Allowed,
-  protocol,
+const listenEvent = (objectWithEventEmitter, eventName, callback, {
+  once = false
+} = {}) => {
+  if (once) {
+    objectWithEventEmitter.once(eventName, callback);
+  } else {
+    objectWithEventEmitter.addListener(eventName, callback);
+  }
+
+  return () => {
+    objectWithEventEmitter.removeListener(eventName, callback);
+  };
+};
+
+/**
+
+https://stackoverflow.com/a/42019773/2634179
+
+*/
+const createPolyglotServer = async ({
+  http2 = false,
+  http1Allowed = true,
   privateKey,
   certificate
 }) => {
-  if (protocol === "http") {
-    if (http2) {
-      const {
-        createServer
-      } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('http2')); });
-      return createServer();
-    }
+  const httpServer = http__default['default'].createServer();
+  const tlsServer = await createSecureServer({
+    privateKey,
+    certificate,
+    http2,
+    http1Allowed
+  });
+  const netServer = net__default['default'].createServer({
+    allowHalfOpen: false
+  });
+  listenEvent(netServer, "connection", socket => {
+    detectSocketProtocol(socket, protocol => {
+      if (protocol === "http") {
+        httpServer.emit("connection", socket);
+        return;
+      }
 
+      if (protocol === "tls") {
+        tlsServer.emit("connection", socket);
+        return;
+      }
+
+      const response = [`HTTP/1.1 400 Bad Request`, `Content-Length: 0`, "", ""].join("\r\n");
+      socket.write(response);
+      socket.end();
+      socket.destroy();
+      netServer.emit("clientError", new Error("protocol error, Neither http, nor tls"), socket);
+    });
+  });
+  netServer._httpServer = httpServer;
+  netServer._tlsServer = tlsServer;
+  return netServer;
+}; // The async part is just to lazyly import "http2" or "https"
+// so that these module are parsed only if used.
+
+const createSecureServer = async ({
+  privateKey,
+  certificate,
+  http2,
+  http1Allowed
+}) => {
+  if (http2) {
     const {
-      createServer
-    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('http')); });
-    return createServer();
-  }
-
-  if (protocol === "https") {
-    if (http2) {
-      const {
-        createSecureServer
-      } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('http2')); });
-      return createSecureServer({
-        key: privateKey,
-        cert: certificate,
-        allowHTTP1: http1Allowed
-      });
-    }
-
-    const {
-      createServer
-    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('https')); });
-    return createServer({
+      createSecureServer
+    } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('http2')); });
+    return createSecureServer({
       key: privateKey,
-      cert: certificate
+      cert: certificate,
+      allowHTTP1: http1Allowed
     });
   }
 
-  throw new Error(`unsupported protocol ${protocol}`);
+  const {
+    createServer
+  } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('https')); });
+  return createServer({
+    key: privateKey,
+    cert: certificate
+  });
+};
+
+const detectSocketProtocol = (socket, protocolDetectedCallback) => {
+  let removeOnceReadableListener = () => {};
+
+  const tryToRead = () => {
+    const buffer = socket.read(1);
+
+    if (buffer === null) {
+      removeOnceReadableListener = socket.once("readable", tryToRead);
+      return;
+    }
+
+    const firstByte = buffer[0];
+    socket.unshift(buffer);
+
+    if (firstByte === 22) {
+      protocolDetectedCallback("tls");
+      return;
+    }
+
+    if (firstByte > 32 && firstByte < 127) {
+      protocolDetectedCallback("http");
+      return;
+    }
+
+    protocolDetectedCallback(null);
+  };
+
+  tryToRead();
+  return () => {
+    removeOnceReadableListener();
+  };
 };
 
 const trackServerPendingConnections = (nodeServer, {
-  http2,
-  onConnectionError
+  http2
 }) => {
   if (http2) {
     // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
-    return trackHttp1ServerPendingConnections(nodeServer, {
-      onConnectionError
-    });
+    return trackHttp1ServerPendingConnections(nodeServer);
   }
 
-  return trackHttp1ServerPendingConnections(nodeServer, {
-    onConnectionError
-  });
+  return trackHttp1ServerPendingConnections(nodeServer);
 }; // const trackHttp2ServerPendingSessions = () => {}
 
-const trackHttp1ServerPendingConnections = (nodeServer, {
-  onConnectionError
-}) => {
+const trackHttp1ServerPendingConnections = nodeServer => {
   const pendingConnections = new Set();
-
-  const connectionListener = connection => {
-    connection.on("close", () => {
-      pendingConnections.delete(connection);
-    });
-
-    if (onConnectionError) {
-      connection.on("error", error => {
-        onConnectionError(error, connection);
-      });
-    }
-
+  const removeConnectionListener = listenEvent(nodeServer, "connection", connection => {
     pendingConnections.add(connection);
-  };
-
-  nodeServer.on("connection", connectionListener);
+    listenEvent(connection, "close", () => {
+      pendingConnections.delete(connection);
+    }, {
+      once: true
+    });
+  });
 
   const stop = async reason => {
-    nodeServer.removeListener("connection", connectionListener);
-    await Promise.all(Array.from(pendingConnections).map(pendingConnection => {
-      return new Promise((resolve, reject) => {
-        pendingConnection.destroy(reason, error => {
-          if (error) {
-            if (error === reason || error.code === "ENOTCONN") {
-              resolve();
-            } else {
-              reject(error);
-            }
-          } else {
-            resolve();
-          }
-        });
-      });
+    removeConnectionListener();
+    const pendingConnectionsArray = Array.from(pendingConnections);
+    pendingConnections.clear();
+    await Promise.all(pendingConnectionsArray.map(async pendingConnection => {
+      await destroyConnection(pendingConnection, reason);
     }));
   };
 
   return {
     stop
   };
+};
+
+const destroyConnection = (connection, reason) => {
+  return new Promise((resolve, reject) => {
+    connection.destroy(reason, error => {
+      if (error) {
+        if (error === reason || error.code === "ENOTCONN") {
+          resolve();
+        } else {
+          reject(error);
+        }
+      } else {
+        resolve();
+      }
+    });
+  });
+};
+
+const listenRequest = (nodeServer, requestCallback) => {
+  if (nodeServer._httpServer) {
+    const removeHttpRequestListener = listenEvent(nodeServer._httpServer, "request", requestCallback);
+    const removeTlsRequestListener = listenEvent(nodeServer._tlsServer, "request", requestCallback);
+    return () => {
+      removeHttpRequestListener();
+      removeTlsRequestListener();
+    };
+  }
+
+  return listenEvent(nodeServer, "request", requestCallback);
 };
 
 const trackServerPendingRequests = (nodeServer, {
@@ -2143,8 +2238,7 @@ const trackServerPendingRequests = (nodeServer, {
 
 const trackHttp1ServerPendingRequests = nodeServer => {
   const pendingClients = new Set();
-
-  const requestListener = (nodeRequest, nodeResponse) => {
+  const removeRequestListener = listenRequest(nodeServer, (nodeRequest, nodeResponse) => {
     const client = {
       nodeRequest,
       nodeResponse
@@ -2153,16 +2247,16 @@ const trackHttp1ServerPendingRequests = nodeServer => {
     nodeResponse.once("close", () => {
       pendingClients.delete(client);
     });
-  };
+  });
 
-  nodeServer.on("request", requestListener);
-
-  const stop = ({
+  const stop = async ({
     status,
     reason
   }) => {
-    nodeServer.removeListener("request", requestListener);
-    return Promise.all(Array.from(pendingClients).map(({
+    removeRequestListener();
+    const pendingClientsArray = Array.from(pendingClients);
+    pendingClients.clear();
+    await Promise.all(pendingClientsArray.map(({
       nodeResponse
     }) => {
       if (nodeResponse.headersSent === false) {
@@ -2559,29 +2653,6 @@ const STOP_REASON_PROCESS_BEFORE_EXIT = createReason("process before exit");
 const STOP_REASON_PROCESS_EXIT = createReason("process exit");
 const STOP_REASON_NOT_SPECIFIED = createReason("not specified");
 
-const trackServerRequest = (nodeServer, fn, {
-  http2
-}) => {
-  if (http2) {
-    // see http2.js: we rely on https://nodejs.org/api/http2.html#http2_compatibility_api
-    return trackHttp1ServerRequest(nodeServer, fn);
-  }
-
-  return trackHttp1ServerRequest(nodeServer, fn);
-}; // const trackHttp2ServerRequest = (nodeServer, fn) => {
-//   nodeServer.on("stream", fn)
-//   return () => {
-//     nodeServer.removeListener("stream", fn)
-//   }
-// }
-
-const trackHttp1ServerRequest = (nodeServer, fn) => {
-  nodeServer.on("request", fn);
-  return () => {
-    nodeServer.removeListener("request", fn);
-  };
-};
-
 const checkContentNegotiation = (request, response, {
   warn
 }) => {
@@ -2619,6 +2690,41 @@ ${requestAcceptEncodingHeader}`);
   }
 };
 
+const listenServerConnectionError = (nodeServer, connectionErrorCallback, {
+  ignoreErrorAfterConnectionIsDestroyed = true
+} = {}) => {
+  const cleanupSet = new Set();
+  const removeConnectionListener = listenEvent(nodeServer, "connection", socket => {
+    const removeSocketErrorListener = listenEvent(socket, "error", error => {
+      if (ignoreErrorAfterConnectionIsDestroyed && socket.destroyed) {
+        return;
+      }
+
+      connectionErrorCallback(error, socket);
+    });
+    const removeOnceSocketCloseListener = listenEvent(socket, "close", () => {
+      removeSocketErrorListener();
+      cleanupSet.delete(cleanup);
+    }, {
+      once: true
+    });
+
+    const cleanup = () => {
+      removeSocketErrorListener();
+      removeOnceSocketCloseListener();
+    };
+
+    cleanupSet.add(cleanup);
+  });
+  return () => {
+    removeConnectionListener();
+    cleanupSet.forEach(cleanup => {
+      cleanup();
+    });
+    cleanupSet.clear();
+  };
+};
+
 const require$2 = module$1.createRequire(url);
 
 const killPort = require$2("kill-port");
@@ -2631,6 +2737,7 @@ const startServer = async ({
   http2 = false,
   http1Allowed = true,
   redirectHttpToHttps,
+  allowHttpRequestOnHttps = false,
   ip = "0.0.0.0",
   // will it work on windows ? https://github.com/nodejs/node/issues/14900
   port = 0,
@@ -2714,7 +2821,7 @@ ${JSON.stringify(request.headers, null, "  ")}
       logLevel
     });
 
-    if (redirectHttpToHttps === undefined && protocol === "https" && !http2) {
+    if (redirectHttpToHttps === undefined && protocol === "https" && !allowHttpRequestOnHttps) {
       redirectHttpToHttps = true;
     }
 
@@ -2723,9 +2830,14 @@ ${JSON.stringify(request.headers, null, "  ")}
       redirectHttpToHttps = false;
     }
 
-    if (redirectHttpToHttps && http2) {
-      logger$1.warn(`redirectHttpToHttps ignored because it does not work with http2. see https://github.com/nodejs/node/issues/23331`);
+    if (allowHttpRequestOnHttps && redirectHttpToHttps) {
+      logger$1.warn(`redirectHttpToHttps ignored because allowHttpRequestOnHttps is enabled`);
       redirectHttpToHttps = false;
+    }
+
+    if (allowHttpRequestOnHttps && protocol === "http") {
+      logger$1.warn(`allowHttpRequestOnHttps ignored because protocol is http`);
+      allowHttpRequestOnHttps = false;
     }
 
     const internalCancellationSource = cancellation.createCancellationSource();
@@ -2783,12 +2895,14 @@ ${JSON.stringify(request.headers, null, "  ")}
       });
     }
 
-    const nodeServer = await createServer({
-      http2,
-      http1Allowed,
+    const nodeServer = await createNodeServer({
       protocol,
+      redirectHttpToHttps,
+      allowHttpRequestOnHttps,
       privateKey,
-      certificate
+      certificate,
+      http2,
+      http1Allowed
     }); // https://nodejs.org/api/net.html#net_server_unref
 
     if (!keepProcessAlive) {
@@ -2817,17 +2931,11 @@ ${JSON.stringify(request.headers, null, "  ")}
     const startOperation = cancellation.createStoppableOperation({
       cancellationToken: serverCancellationToken,
       start: async () => {
-        if (portHint) {
-          port = await findFreePort(portHint, {
-            cancellationToken: serverCancellationToken,
-            ip
-          });
-        }
-
         return listen({
           cancellationToken: serverCancellationToken,
           server: nodeServer,
           port,
+          portHint,
           ip
         });
       },
@@ -2841,13 +2949,10 @@ ${JSON.stringify(request.headers, null, "  ")}
       port
     });
     const serverOrigin = serverOrigins.main;
+    const removeConnectionErrorListener = listenServerConnectionError(nodeServer, onError);
+    registerCleanupCallback(removeConnectionErrorListener);
     const connectionsTracker = trackServerPendingConnections(nodeServer, {
-      http2,
-      onConnectionError: (error, connection) => {
-        if (!connection.destroyed) {
-          onError(error);
-        }
-      }
+      http2
     }); // opened connection must be shutdown before the close event is emitted
 
     registerCleanupCallback(connectionsTracker.stop);
@@ -2869,8 +2974,9 @@ ${JSON.stringify(request.headers, null, "  ")}
 
       if (redirectHttpToHttps && !nodeRequest.connection.encrypted) {
         nodeResponse.writeHead(301, {
-          location: `${serverOrigin}${nodeRequest.ressource}`
+          location: `${serverOrigin}${nodeRequest.url}`
         });
+        nodeResponse.end();
         return;
       }
 
@@ -2955,9 +3061,7 @@ ${request.method} ${request.origin}${request.ressource}`);
       }
     };
 
-    const removeRequestListener = trackServerRequest(nodeServer, requestCallback, {
-      http2
-    }); // ensure we don't try to handle new requests while server is stopping
+    const removeRequestListener = listenRequest(nodeServer, requestCallback); // ensure we don't try to handle new requests while server is stopping
 
     registerCleanupCallback(removeRequestListener);
     logger$1.info(`${serverName} started at ${serverOrigin} (${serverOrigins.external})`);
@@ -3060,7 +3164,38 @@ ${request.method} ${request.origin}${request.ressource}`);
   });
 };
 
-const statusToStatusText = status => http.STATUS_CODES[status] || "not specified"; // https://www.w3.org/TR/cors/
+const createNodeServer = async ({
+  protocol,
+  redirectHttpToHttps,
+  allowHttpRequestOnHttps,
+  privateKey,
+  certificate,
+  http2,
+  http1Allowed
+}) => {
+  if (protocol === "http") {
+    return http__default['default'].createServer();
+  }
+
+  if (redirectHttpToHttps || allowHttpRequestOnHttps) {
+    return createPolyglotServer({
+      privateKey,
+      certificate,
+      http2,
+      http1Allowed
+    });
+  }
+
+  const {
+    createServer
+  } = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('https')); });
+  return createServer({
+    key: privateKey,
+    cert: certificate
+  });
+};
+
+const statusToStatusText = status => http__default['default'].STATUS_CODES[status] || "not specified"; // https://www.w3.org/TR/cors/
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
 
 
