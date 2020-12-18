@@ -1,6 +1,6 @@
 {
   "name": "@jsenv/server",
-  "version": "5.4.0",
+  "version": "5.4.1",
   "description": "High level api for node.js server.",
   "license": "MIT",
   "repository": {
@@ -45,10 +45,10 @@
     "postpublish": "node ./script/transform-package/restore-postinstall.js"
   },
   "dependencies": {
-    "@jsenv/cancellation": "2.0.2",
+    "@jsenv/cancellation": "2.0.3",
     "@jsenv/logger": "3.4.0",
     "@jsenv/node-signals": "2.0.1",
-    "@jsenv/util": "4.0.3",
+    "@jsenv/util": "4.0.4",
     "abort-controller": "3.0.0",
     "kill-port": "1.6.1",
     "node-fetch": "2.6.1"
