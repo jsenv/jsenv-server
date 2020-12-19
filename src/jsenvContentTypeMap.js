@@ -81,6 +81,9 @@ export const jsenvContentTypeMap = {
   "text/x-sass": {
     extensions: ["sass"],
   },
+  "text/x-scss": {
+    extensions: ["scss"],
+  },
   "text/cache-manifest": {
     extensions: ["appcache"],
   },
