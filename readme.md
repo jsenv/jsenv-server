@@ -74,6 +74,25 @@ This is achieved thanks to a parameter called `requestToResponse` documented bel
 
 > When `requestToResponse` returns `null` or `undefined`, server respond to that request with `501 Not implemented`.
 
+<details>
+  <summary>requestToResponse example</summary>
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: () => {
+    return {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: "Hello world",
+    }
+  },
+})
+```
+
+</details>
+
 ## request
 
 `request` is an object representing an http request. `request` are passed as first argument to `requestToResponse`.
@@ -101,38 +120,14 @@ This is achieved thanks to a parameter called `requestToResponse` documented bel
 <details>
   <summary>Reading request body</summary>
 
-Read body as string
-
 ```js
 import { startServer, readRequestBody } from "@jsenv/server"
 
 startServer({
   requestToResponse: async (request) => {
-    const string = await readRequestBody(request)
-  },
-})
-```
-
-Read body as buffer
-
-```js
-import { startServer, readRequestBody } from "@jsenv/server"
-
-startServer({
-  requestToResponse: async (request) => {
-    const buffer = await readRequestBody(request, { as: "buffer" })
-  },
-})
-```
-
-Read body as json
-
-```js
-import { startServer, readRequestBody } from "@jsenv/server"
-
-startServer({
-  requestToResponse: async (request) => {
-    const json = await readRequestBody(request, { as: "json" })
+    const requestBodyAsString = await readRequestBody(request)
+    const requestBodyAsJson = await readRequestBody(request, { as: "json" })
+    const requestBodyAsBuffer = await readRequestBody(request, { as: "buffer" })
   },
 })
 ```
@@ -147,11 +142,18 @@ startServer({
   <summary>response body declared with a string</summary>
 
 ```js
-const response = {
-  status: 200,
-  headers: { "content-type": "text/plain" },
-  body: "Hello world",
-}
+import { startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: () => {
+    const response = {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: "Hello world",
+    }
+    return response
+  },
+})
 ```
 
 </details>
@@ -160,11 +162,18 @@ const response = {
   <summary>response body declared with a buffer</summary>
 
 ```js
-const response = {
-  status: 200,
-  headers: { "content-type": "text/plain" },
-  body: Buffer.from("Hello world"),
-}
+import { startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: () => {
+    const response = {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: Buffer.from("Hello world"),
+    }
+    return response
+  },
+})
 ```
 
 </details>
@@ -173,13 +182,19 @@ const response = {
   <summary>response body declared with a readable stream</summary>
 
 ```js
-const { createReadStream } = require("fs")
+import { createReadStream } from "fs"
+import { startServer } from "@jsenv/server"
 
-const response = {
-  status: 200,
-  headers: { "content-type": "text/plain" },
-  body: createReadStream("/User/you/folder/file.txt"),
-}
+startServer({
+  requestToResponse: () => {
+    const response = {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: createReadStream("/User/you/folder/file.txt"),
+    }
+    return response
+  },
+})
 ```
 
 </details>
@@ -188,20 +203,27 @@ const response = {
   <summary>response body declared with an observable</summary>
 
 ```js
-const response = {
-  status: 200,
-  headers: { "content-type": "text/plain" },
-  body: {
-    [Symbol.observable]: () => {
-      return {
-        subscribe: ({ next, complete }) => {
-          next("Hello world")
-          complete()
+import { startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: () => {
+    const response = {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: {
+        [Symbol.observable]: () => {
+          return {
+            subscribe: ({ next, complete }) => {
+              next("Hello world")
+              complete()
+            },
+          }
         },
-      }
-    },
+      },
+    }
+    return response
   },
-}
+})
 ```
 
 </details>
