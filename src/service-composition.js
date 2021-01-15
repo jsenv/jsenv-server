@@ -24,12 +24,7 @@ export const firstServiceWithTiming = (namedServices) => {
         Object.assign(servicesTiming, serviceTiming)
         return value
       },
-      predicate: (value) => {
-        if (value === null) {
-          return false
-        }
-        return typeof value === "object"
-      },
+      predicate: serviceGeneratedResponsePredicate,
     })
     if (response) {
       return composeResponse({ timing: servicesTiming }, response)
