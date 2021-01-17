@@ -1099,19 +1099,19 @@ Passing `forcePort` to true when `port` is `0` will throw because it makes no se
 
 ## logLevel
 
-`logLevel` parameter is a string controlling how much logs server will write in the console. This parameters is otional with a default value of `"info"`.
+`logLevel` parameter is a string controlling how much logs server will write in the console. This parameters is optional with a default value of `"info"`.
 
 — see [jsenv/jsenv-logger#logLevel](https://github.com/jsenv/jsenv-logger#logLevel)
 
 ## stopOnSIGINT
 
-`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process SIGINT is occurs. This parameters is otional and enabled by default.
+`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process SIGINT is occurs. This parameters is optional and enabled by default.
 
 SIGINT occurs when you hit ctrl+c in your terminal for instance.
 
 ## stopOnExit
 
-`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process exits. This parameters is otional and enabled by default.
+`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process exits. This parameters is optional and enabled by default.
 
 ## stopOnInternalError
 
@@ -1119,7 +1119,7 @@ SIGINT occurs when you hit ctrl+c in your terminal for instance.
 
 ## keepProcessAlive
 
-`keepProcessAlive` parameter is a boolean controlling if server keeps the process alive. This parameter is otional and enabled by default.
+`keepProcessAlive` parameter is a boolean controlling if server keeps the process alive. This parameter is optional and enabled by default.
 
 When false, if nothing keeps the process alive node process will end even if your server is still listening.
 
@@ -1133,13 +1133,13 @@ When false, if nothing keeps the process alive node process will end even if you
 
 ## startedCallback
 
-`startedCallback` parameter is a function called when server starts listening. This parameters is otional with a default value of `() => {}`.
+`startedCallback` parameter is a function called when server starts listening. This parameter is optional with a default value of `() => {}`.
 
 `startedCallback` receives one argument being an object with an origin property representing the server origin like `http://127.0.0.1:8080`.
 
 ## stoppedCallback
 
-`stoppedCallback` parameter is a function called when server stops. This parameters is otional with a default value of `() => {}`.
+`stoppedCallback` parameter is a function called when server stops. This parameter is optional with a default value of `() => {}`.
 
 `stoppedCallback` receives one argument being an object with a reason property representing why the server stopped.
 
