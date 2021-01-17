@@ -62,7 +62,7 @@ Non exhaustive list of features in `@jsenv/server`.
 <details>
   <summary>https ready</summary>
 
-No https certificate within easy reach? You can use the default https certificate and start an https server right away.
+Server can be started in https without https certificate (a default certificate will be used). Very useful when you don't have https certificate within easy reach but want to start server in https.
 
 ```js
 import { startServer } from "@jsenv/server"
@@ -79,7 +79,7 @@ Read more in [Protocol and certificate](#Protocol-and-certificate).
 <details>
   <summary>https redirection</summary>
 
-When server is started in `https` mode, `http` request are redirected to `https`. Read more in [redirectHttpToHttps](#redirectHttpToHttps).
+When server is started in `https` mode, `http` request are auto redirected to `https`. Read more in [redirectHttpToHttps](#redirectHttpToHttps).
 
 </details>
 
@@ -114,8 +114,8 @@ const expressMiddleware = (request, response, next) => {
 
   const responseBody = "Hello world"
   res.statusCode = 200
-  res.setHeader("content-length", Buffer.byteLength(responseBody))
   res.setHeader("content-type", "text/plain")
+  res.setHeader("content-length", Buffer.byteLength(responseBody))
   res.end(responseBody)
 }
 ```
@@ -369,7 +369,7 @@ In `@jsenv/server` terminology [requestToResponse](#requestToResponse) function 
 
 > A service can be described as an async function receiving a request and returning a response or null.
 
-On a real use case `requestToResponse` needs to be splitted into smaller functions (services) to keep it maintanable. `@jsenv/server` provides an helper for this called `firstService`. It is an async function returning the first response produced by a list of async functions called in sequence.
+On a real use case `requestToResponse` needs to be splitted into smaller functions (services) to keep it maintainable. `@jsenv/server` provides an helper for this called `firstService`. It is an async function returning the first response produced by a list of async functions called in sequence.
 
 <details>
   <summary>firstService code example</summary>
