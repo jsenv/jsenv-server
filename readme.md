@@ -1204,4 +1204,4 @@ If you call stop without argument, promise is resolved with `STOP_REASON_NOT_SPE
 
 `stoppedPromise` is a promise resolved with a reason when server is stopped.
 
-`stoppedPromise` exists because server can be stopped calling `stop` or automatically by parameters like [stopOnSIGINT](#stopOnSIGINT).
+`stoppedPromise` exists because server can be stopped by code that you don't control. For instance when [stopOnSIGINT](#stopOnSIGINT) parameter is enabled.
