@@ -1157,18 +1157,20 @@ import {
 } from "@jsenv/server"
 ```
 
-`reason` might also be a value you passed yourself:
+`reason` might also be a value you passed yourself.
 
 ```js
 import { startServer } from "@jsenv/server"
 
 const { stop } = await startServer({
   stoppedCallback: ({ reason }) => {
-    reason === 42
+    reason === 42 // true
   },
 })
 stop(42)
 ```
+
+If you call stop without passing any argument, `reason` will be `STOP_REASON_NOT_SPECIFIED`.
 
 ## startServer return value
 
