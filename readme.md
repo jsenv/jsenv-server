@@ -832,25 +832,25 @@ startServer({
 
 ## accessControlAllowRequestOrigin
 
-`accessControlAllowRequestOrigin` parameter is a boolean controlling if request origin is auto allowed. This parameter is optional with a default value of `false`.
+`accessControlAllowRequestOrigin` parameter is a boolean controlling if request origin is auto allowed. This parameter is optional and disabled by default.
 
 Use this parameter to allow any origin.
 
 ## accessControlAllowRequestMethod
 
-`accessControlAllowRequestMethod` parameter is a boolean controlling if request method is auto allowed. This parameter is optional with a default value of `false`.
+`accessControlAllowRequestMethod` parameter is a boolean controlling if request method is auto allowed. This parameter is optional and disabled by default.
 
 Use this parameter to allowed any request method.
 
 ## accessControlAllowRequestHeaders
 
-`accessControlAllowRequestHeaders` parameter is a boolean controlling if request headers are auto allowed. This parameter is optional with a default value of `false`.
+`accessControlAllowRequestHeaders` parameter is a boolean controlling if request headers are auto allowed. This parameter is optional and disabled by default.
 
 Use this parameter to allowed any request headers.
 
 ## accessControlAllowCredentials
 
-`accessControlAllowCredentials` parameter is a boolean controlling if request credentials are allowed when requesting your server. This parameter is optional with a default value of `false`.
+`accessControlAllowCredentials` parameter is a boolean controlling if request credentials are allowed when requesting your server. This parameter is optional and disabled by default.
 
 ## accessControlMaxAge
 
@@ -1093,7 +1093,7 @@ When `portHint` is a number and `port` is `0` server will try to listen `portHin
 
 ## forcePort
 
-`forcePort` parameter is a boolean controlling if process using the port will be killed. This parameter is optional with a default value of `false`.
+`forcePort` parameter is a boolean controlling if process using the port will be killed. This parameter is optional and disabled by default.
 
 Passing `forcePort` to true when `port` is `0` will throw because it makes no sense.
 
@@ -1105,13 +1105,13 @@ Passing `forcePort` to true when `port` is `0` will throw because it makes no se
 
 ## stopOnSIGINT
 
-`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process SIGINT is occurs. This parameters is otional with a default value of `true`.
+`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process SIGINT is occurs. This parameters is otional and enabled by default.
 
 SIGINT occurs when you hit ctrl+c in your terminal for instance.
 
 ## stopOnExit
 
-`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process exits. This parameters is otional with a default value of `true`.
+`stopOnSIGINT` parameter is a boolean controlling if server stops itself when process exits. This parameters is otional and enabled by default.
 
 ## stopOnInternalError
 
@@ -1119,7 +1119,7 @@ SIGINT occurs when you hit ctrl+c in your terminal for instance.
 
 ## keepProcessAlive
 
-`keepProcessAlive` parameter is a boolean controlling if server keeps the process alive. This parameter is otional with a default value of `true`.
+`keepProcessAlive` parameter is a boolean controlling if server keeps the process alive. This parameter is otional and enabled by default.
 
 When false, if nothing keeps the process alive node process will end even if your server is still listening.
 
