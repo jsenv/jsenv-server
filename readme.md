@@ -10,6 +10,7 @@ High level api for node.js server.
 # Table of contents
 
 - [Presentation](#Presentation)
+- [Features](#Features)
 - [Installation](#Installation)
 - [Responding to requests](#Responding-to-requests)
 - [Services and composition](#Services-and-composition)
@@ -53,6 +54,140 @@ const server = await startServer({
 ```js
 const { startServer } = require("@jsenv/server")
 ```
+
+# Features
+
+Non exhaustive list of features in `@jsenv/server`.
+
+<details>
+  <summary>https ready</summary>
+
+No https certificate within easy reach? You can use the default https certificate and start an https server right away.
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  protocol: "https",
+})
+```
+
+Read more in [Protocol and certificate](#Protocol-and-certificate).
+
+</details>
+
+<details>
+  <summary>https redirection</summary>
+
+When server is started in `https` mode, `http` request are redirected to `https`. Read more in [redirectHttpToHttps](#redirectHttpToHttps).
+
+</details>
+
+<details>
+  <summary>http2 compatible</summary>
+
+Make your server use `http2` with one line.
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  http2: true,
+})
+```
+
+</details>
+
+<details>
+  <summary>Pure function</summary>
+
+`@jsenv/server` allows to write server logic using pure function. It makes your code easier to read and unit test.
+
+An express middleware
+
+```js
+const expressMiddleware = (request, response, next) => {
+  if (request.path !== "/") {
+    next()
+    return
+  }
+
+  const responseBody = "Hello world"
+  res.statusCode = 200
+  res.setHeader("content-length", Buffer.byteLength(responseBody))
+  res.setHeader("content-type", "text/plain")
+  res.end(responseBody)
+}
+```
+
+A pure middleware
+
+```js
+const pureMiddleware = (request) => {
+  if (request.ressource !== "/") {
+    return null
+  }
+
+  const responseBody = "Hello world"
+  return {
+    status: 200,
+    headers: {
+      "content-type": "text-plain",
+      "content-length": Buffer.byteLength(responseBody),
+    },
+    body: responseBody,
+  }
+}
+```
+
+> A _pure middleware_ is called a _service_ in `@jsenv/server` terminology. Read more in [Services and composition](#Services-and-composition)
+
+</details>
+
+<details>
+  <summary>CORS</summary>
+
+Enable cross origin ressource sharing on the server using few parameters. Access control headers are set on every response **even if server encounters an unexpected error (500)**. And that is important otherwise browser rightfully deduce CORS are disabled. Read more in [Access control (CORS)](#Access-control-CORS).
+
+</details>
+
+<details>
+  <summary>Refined error handling</summary>
+
+Any error throw will be gracefully handled by `@jsenv/server` and produce a `500` response. And it's also very simple to put your own logic on unexpected errors to produce your own responses.
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  requestToResponse: () => {
+    throw new Error("foo")
+  },
+  serverInternalErrorToResponse: (error) => {
+    const body = `An error occured: ${error.message}`
+
+    return {
+      status: 500,
+      headers: {
+        "content-type": "text/plain",
+        "content-length": Buffer.byteLength(body),
+      },
+      body,
+    }
+  },
+})
+```
+
+Read more in [serverInternalErrorToResponse](#serverInternalErrorToResponse)
+
+</details>
+
+<details>
+  <summary>Server timing included</summary>
+
+Get server performance insight in browser devtools using server timing headers. Read more in [Server timing](#Server-timing).
+
+</details>
 
 # Installation
 
@@ -767,8 +902,8 @@ import { startServer } from "@jsenv/server"
 
 startServer({
   protocol: "https",
-  privateKey: readFileSync(`${__dirname}/ssl/private.pem`),
-  certificate: readFileSync(`${__dirname}/ssl/cert.pem`),
+  privateKey: readFileSync(new URL("./ssl/private.pem", import.meta.url)),
+  certificate: readFileSync(new URL("./ssl/cert.pem", import.meta.url)),
 })
 ```
 
@@ -786,24 +921,22 @@ startServer({
 
 `protocol` parameter is a string which is either `"http"` or `"https"`. This parameter is optional with a default value of `"http"`.
 
-If you use `https` protocol you can provide your own certificate using `privateKey` and `certificate` parameters.
+If you use `https` protocol you can provide your own certificate using [privateKey](#privateKey) and [certificate](#certificate) parameters.
 
 ## redirectHttpToHttps
 
-`redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made receiving in http to https. This parameter is optional and enabled by default when protocol is `https`.
+`redirectHttpToHttps` parameter is a boolean controlling if server will redirect request made receiving in http to https. This parameter is optional and enabled by default when [protocol](#protocol) is `https`.
 
 ## allowHttpRequestOnHttps
 
-`allowHttpRequestOnHttps` parameter is a boolean controlling if server will handle `http` request even if started in https. This parameter is optional and disabled by default. When enabled, if a client request server in http, [requestToResponse](#requestToResponse) is called with that http request. In that case `request.origin` can be used to distinguish request protocol.
+`allowHttpRequestOnHttps` parameter is a boolean controlling if server will handle `http` request even if started in `https`. This parameter is optional and disabled by default. When enabled, if a client request server in `http`, [requestToResponse](#requestToResponse) is called with that `http` request. In that case, `request.origin` can be used to distinguish request made in `http` and `https`.
 
-`allowHttpRequestOnHttps` and `redirectHttpToHttps` are incompatible because:
+`allowHttpRequestOnHttps` and [redirectHttpToHttps](#redirectHttpToHttps) are incompatible because:
 
-- Enabling `allowHttpRequestOnHttps` means:
+`allowHttpRequestOnHttps` means: I want to handle request made in http in `requestToResponse`.<br />
+[redirectHttpToHttps](#redirectHttpToHttps) means: I want to redirect http request to https.
 
-  > I want to handle request made in http in `requestToResponse`.
-
-- Enabling `redirectHttpToHttps` means:
-  > I want to redirect http request to https.
+You either want to redirect http to https or handle http request, no both at the same time. For this reason, if you enable both a warning is logged and [redirectHttpToHttps](#redirectHttpToHttps) is ignored.
 
 <details>
   <summary>allowHttpRequestOnHttps code example</summary>
