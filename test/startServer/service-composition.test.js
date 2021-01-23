@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, firstService, fetchUrl, headersToObject } from "@jsenv/server"
+import { startServer, composeService, fetchUrl, headersToObject } from "@jsenv/server"
 
 const noContentService = (request) => {
   if (request.ressource !== "/") return null
@@ -14,7 +14,7 @@ const okService = (request) => {
 const { origin } = await startServer({
   keepProcessAlive: false,
   logLevel: "warn",
-  requestToResponse: firstService(noContentService, okService),
+  requestToResponse: composeService(noContentService, okService),
 })
 
 {

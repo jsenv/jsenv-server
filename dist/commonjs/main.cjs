@@ -897,6 +897,9 @@ const jsenvContentTypeMap = {
   "text/x-sass": {
     extensions: ["sass"]
   },
+  "text/x-scss": {
+    extensions: ["scss"]
+  },
   "text/cache-manifest": {
     extensions: ["appcache"]
   },
@@ -1713,7 +1716,7 @@ const headersToObject = headers => {
   return headersObject;
 };
 
-const firstService = (...callbacks) => {
+const composeService = (...callbacks) => {
   return request => {
     return cancellation.firstOperationMatching({
       array: callbacks,
@@ -1722,7 +1725,7 @@ const firstService = (...callbacks) => {
     });
   };
 };
-const firstServiceWithTiming = namedServices => {
+const composeServiceWithTiming = namedServices => {
   return async request => {
     const servicesTiming = {};
     const response = await cancellation.firstOperationMatching({
@@ -1740,13 +1743,7 @@ const firstServiceWithTiming = namedServices => {
         Object.assign(servicesTiming, serviceTiming);
         return value;
       },
-      predicate: value => {
-        if (value === null) {
-          return false;
-        }
-
-        return typeof value === "object";
-      }
+      predicate: serviceGeneratedResponsePredicate
     });
 
     if (response) {
@@ -3289,12 +3286,12 @@ exports.STOP_REASON_PROCESS_SIGHUP = STOP_REASON_PROCESS_SIGHUP;
 exports.STOP_REASON_PROCESS_SIGINT = STOP_REASON_PROCESS_SIGINT;
 exports.STOP_REASON_PROCESS_SIGTERM = STOP_REASON_PROCESS_SIGTERM;
 exports.composeResponse = composeResponse;
+exports.composeService = composeService;
+exports.composeServiceWithTiming = composeServiceWithTiming;
 exports.convertFileSystemErrorToResponseProperties = convertFileSystemErrorToResponseProperties;
 exports.createSSERoom = createSSERoom;
 exports.fetchUrl = fetchUrl;
 exports.findFreePort = findFreePort;
-exports.firstService = firstService;
-exports.firstServiceWithTiming = firstServiceWithTiming;
 exports.headersToObject = headersToObject;
 exports.jsenvAccessControlAllowedHeaders = jsenvAccessControlAllowedHeaders;
 exports.jsenvAccessControlAllowedMethods = jsenvAccessControlAllowedMethods;

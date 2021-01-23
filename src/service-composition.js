@@ -2,7 +2,7 @@ import { firstOperationMatching } from "@jsenv/cancellation"
 import { timeFunction } from "./serverTiming.js"
 import { composeResponse } from "./composeResponse.js"
 
-export const firstService = (...callbacks) => {
+export const composeService = (...callbacks) => {
   return (request) => {
     return firstOperationMatching({
       array: callbacks,
@@ -12,7 +12,7 @@ export const firstService = (...callbacks) => {
   }
 }
 
-export const firstServiceWithTiming = (namedServices) => {
+export const composeServiceWithTiming = (namedServices) => {
   return async (request) => {
     const servicesTiming = {}
     const response = await firstOperationMatching({

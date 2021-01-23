@@ -1,5 +1,5 @@
 import { assert } from "@jsenv/assert"
-import { startServer, firstServiceWithTiming, fetchUrl } from "@jsenv/server"
+import { startServer, composeServiceWithTiming, fetchUrl } from "@jsenv/server"
 import { parseServerTimingHeader } from "@jsenv/server/src/serverTiming.js"
 
 const noContentService = (request) => {
@@ -16,7 +16,7 @@ const { origin } = await startServer({
   keepProcessAlive: false,
   logLevel: "warn",
   sendServerTiming: true,
-  requestToResponse: firstServiceWithTiming({
+  requestToResponse: composeServiceWithTiming({
     "service:no content": noContentService,
     "service:ok": okService,
   }),

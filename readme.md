@@ -369,13 +369,13 @@ In `@jsenv/server` terminology [requestToResponse](#requestToResponse) function 
 
 > A service can be described as an async function receiving a request and returning a response or null.
 
-On a real use case `requestToResponse` needs to be splitted into smaller functions (services) to keep it maintainable. `@jsenv/server` provides an helper for this called `firstService`. It is an async function returning the first response produced by a list of async functions called in sequence.
+On a real use case `requestToResponse` needs to be splitted into smaller functions (services) to keep it maintainable. `@jsenv/server` provides an helper for this called `composeService`. It is an async function returning the first response produced by a list of async functions called in sequence.
 
 <details>
-  <summary>firstService code example</summary>
+  <summary>composeService code example</summary>
 
 ```js
-import { startServer, firstService } from "@jsenv/server"
+import { startServer, composeService } from "@jsenv/server"
 
 const noContentService = (request) => {
   if (request.ressource !== "/") return null
@@ -388,7 +388,7 @@ const okService = (request) => {
 }
 
 startServer({
-  requestToResponse: firstService(noContentService, okService),
+  requestToResponse: composeService(noContentService, okService),
 })
 ```
 
@@ -995,13 +995,13 @@ Server timing consists into sending headers in the response concerning the serve
 
 </details>
 
-You can track each service timing by replacing `firstService` usage seen in [Services and composition](#Services-and-composition) by `firstServiceWithTiming`. It will measure time taken by each function for you.
+You can track each service timing by replacing `composeService` usage seen in [Services and composition](#Services-and-composition) by `composeServiceWithTiming`. It will measure time taken by each function for you.
 
 <details>
-  <summary>firstServiceWithTiming code example</summary>
+  <summary>composeServiceWithTiming code example</summary>
 
 ```js
-import { startServer, firstServiceWithTiming } from "@jsenv/server"
+import { startServer, composeServiceWithTiming } from "@jsenv/server"
 
 const noContentService = (request) => {
   if (request.ressource !== "/") return null
@@ -1015,7 +1015,7 @@ const okService = (request) => {
 
 startServer({
   sendServerTiming: true,
-  requestToResponse: firstServiceWithTiming({
+  requestToResponse: composeServiceWithTiming({
     "service:nocontent": noContentService,
     "service:ok": okService,
   }),
