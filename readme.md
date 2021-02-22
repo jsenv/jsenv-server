@@ -192,7 +192,7 @@ Get server performance insight in browser devtools using server timing headers. 
 <details>
   <summary>Server Sent Events ready</summary>
 
-Provide an helper to have server sent events with few lines of code.
+Create server sent events with a few lines of code.
 
 `server.js`
 
@@ -210,8 +210,8 @@ startServer({
   protocol: "https",
   port: 3456,
   requestToResponse: (request) => {
-    const { accept } = request.headers
-    if (!accept || !accept.includes("text/event-stream")) {
+    const { accept = "" } = request.headers
+    if (!accept.includes("text/event-stream")) {
       return null
     }
     return room.connectRequest(request)
@@ -237,7 +237,7 @@ eventSource.addEventListener("ping", ({ lastEventId }) => {
 })
 ```
 
-![Screencast of server sent events execution in a terminal](./docs/sse-screencast.mp4)
+![Screencast of server sent events execution in a terminal](./docs/sse-screencast.gif)
 
 </details>
 
