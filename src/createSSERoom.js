@@ -22,7 +22,7 @@ export const createSSERoom = ({
   // we could add some limit
   // one limit could be that an event older than 24h is deleted
   let previousEventId = 0
-  let state = "closed"
+  let opened = true
   let interval
 
   const eventsSince = (id) => {
@@ -39,7 +39,7 @@ export const createSSERoom = ({
         status: 503,
       }
     }
-    if (state === "closed") {
+    if (!opened) {
       return {
         status: 204,
       }
@@ -107,6 +107,13 @@ export const createSSERoom = ({
     }
   }
 
+  const connectRequest = (request) => {
+    return connect(
+      request.headers["last-event-id"] ||
+        new URL(request.ressource, request.origin).searchParams.get("last-event-id"),
+    )
+  }
+
   const write = (data) => {
     connections.forEach((connection) => {
       connection.write(data)
@@ -140,7 +147,8 @@ export const createSSERoom = ({
   }
 
   const start = () => {
-    state = "started"
+    if (opened) return
+    opened = true
     interval = setInterval(keepAlive, keepaliveDuration)
     if (!keepProcessAlive) {
       interval.unref()
@@ -148,17 +156,19 @@ export const createSSERoom = ({
   }
 
   const stop = () => {
+    if (!opened) return
     logger.debug(`stopping, number of client to close: ${connections.size}`)
     connections.forEach((connection) => connection.unsubscribe())
     clearInterval(interval)
     eventHistory.reset()
-    state = "stopped"
+    opened = false
   }
 
   return {
     start,
     stop,
     connect,
+    connectRequest,
     eventsSince,
     sendEvent,
 

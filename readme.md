@@ -189,6 +189,58 @@ Get server performance insight in browser devtools using server timing headers. 
 
 </details>
 
+<details>
+  <summary>Server Sent Events ready</summary>
+
+Create server sent events with a few lines of code.
+
+`server.js`
+
+```js
+import { startServer, createSSERoom } from "@jsenv/server"
+
+const room = createSSERoom()
+setInterval(() => {
+  room.sendEvent({
+    type: "ping",
+  })
+}, 1000)
+
+startServer({
+  protocol: "https",
+  port: 3456,
+  requestToResponse: (request) => {
+    const { accept = "" } = request.headers
+    if (!accept.includes("text/event-stream")) {
+      return null
+    }
+    return room.connectRequest(request)
+  },
+})
+```
+
+`client.js`
+
+```js
+import { createRequire } from "module"
+
+const require = createRequire(import.meta.url)
+
+const EventSource = require("eventsource")
+
+const eventSource = new EventSource("https://localhost:3456", {
+  https: { rejectUnauthorized: false },
+})
+
+eventSource.addEventListener("ping", ({ lastEventId }) => {
+  console.log("> ping from server", { lastEventId })
+})
+```
+
+![Screencast of server sent events execution in a terminal](./docs/sse-screencast.gif)
+
+</details>
+
 # Installation
 
 ```console

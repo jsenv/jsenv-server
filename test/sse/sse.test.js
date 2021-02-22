@@ -61,7 +61,6 @@ const timeEllapsedPromise = (ms) => {
 // a client is notified from an event
 {
   const room = createSSERoom()
-  room.start()
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
@@ -95,7 +94,6 @@ const timeEllapsedPromise = (ms) => {
 // a client is notified of events occuring while he is disconnected
 {
   const room = createSSERoom()
-  room.start()
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
@@ -161,9 +159,7 @@ const timeEllapsedPromise = (ms) => {
 // a server can have many rooms and client can connect the one he wants
 {
   const roomA = createSSERoom()
-  roomA.start()
   const roomB = createSSERoom()
-  roomB.start()
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
@@ -223,7 +219,6 @@ const timeEllapsedPromise = (ms) => {
 // a room can have many clients
 {
   const room = createSSERoom()
-  room.start()
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
@@ -280,7 +275,6 @@ const timeEllapsedPromise = (ms) => {
   const room = createSSERoom({
     maxConnectionAllowed: 1,
   })
-  room.start()
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
@@ -313,6 +307,7 @@ const timeEllapsedPromise = (ms) => {
 // test whats happens with a room that is not started or is stopped
 {
   const room = createSSERoom()
+  room.stop()
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
