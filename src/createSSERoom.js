@@ -1,5 +1,5 @@
 import { createLogger } from "@jsenv/logger"
-import { createObservable } from "./internal/observable.js"
+import { createObservable, createCompositeProducer } from "./internal/observable.js"
 
 // https://www.html5rocks.com/en/tutorials/eventsource/basics/
 export const createSSERoom = ({
@@ -11,11 +11,12 @@ export const createSSERoom = ({
   historyLength = 1 * 1000,
   maxClientAllowed = 100, // max 100 clients accepted
   computeEventId = (event, lastEventId) => lastEventId + 1,
-  welcomeEvent = false,
-  welcomeEventPublic = false,
+  welcomeEventEnabled = false,
+  welcomeEventPublic = false, // decides if welcome event are sent to other clients
 } = {}) => {
   const logger = createLogger({ logLevel })
 
+  const room = {}
   const clients = new Set()
   const eventHistory = createEventHistory(historyLength)
   // what about previousEventId that keeps growing ?
@@ -31,12 +32,6 @@ export const createSSERoom = ({
     // in a room otherwise it cannot be garbage collected
     // by the way our current implementation prevent request from being garbage collected
     // (anyway if it's kept alive I'm sure something in Node.js keeps it in memory)
-
-    // should we allow a given request to join 2 different room ?
-    // why not but it means client.write
-    // should write in n response body instead of 1
-    // et aussi de pouvoir leave une room
-    // devrait alors unsubsribe une partie de la connection et pas tout
 
     const lastKnownId =
       request.headers["last-event-id"] ||
@@ -54,52 +49,59 @@ export const createSSERoom = ({
       }
     }
 
-    const firstEvent = {
-      retry: retryDuration,
-      type: "comment",
-      data: new Date().toLocaleTimeString(),
-    }
-    if (welcomeEvent) {
-      firstEvent.type = "welcome"
-      firstEvent.id = computeEventId(firstEvent, previousEventId)
-      previousEventId = firstEvent.id
-      eventHistory.add(firstEvent)
-    }
+    const sseRoomObservable = createObservable(({ next, complete }) => {
+      const client = {
+        next,
+        complete,
+      }
+      clients.add(client)
+      logger.debug(`A client has joined. Number of client in room: ${clients.size}`)
 
-    const events = [
-      // send events which occured between lastKnownId & now
-      ...(lastKnownId === undefined ? [] : eventsSince(lastKnownId)),
-      firstEvent,
-    ]
-
-    const client = {
-      request,
-      unsubscribe: () => {
-        if (clients.has(client)) {
-          clients.delete(client)
-          logger.debug(
-            `client connection closed by us, number of client connected to event source: ${clients.size}`,
+      if (lastKnownId !== undefined) {
+        const previousEvents = getAllEventSince(lastKnownId)
+        const eventMissedCount = previousEvents.length
+        if (eventMissedCount > 0) {
+          logger.info(
+            `send ${eventMissedCount} event missed by client since event with id "${lastKnownId}"`,
           )
+          previousEvents.forEach((previousEvent) => {
+            next(stringifySourceEvent(previousEvent))
+          })
         }
-      },
-      write: () => {},
-    }
-    clients.add(client)
+      }
 
-    const body = createObservable(({ next }) => {
-      client.write = next
+      if (welcomeEventEnabled) {
+        const welcomeEvent = {
+          retry: retryDuration,
+          type: "welcome",
+          data: new Date().toLocaleTimeString(),
+        }
+        addEventToHistory(welcomeEvent)
 
-      events.forEach((event) => {
-        logger.debug(`send ${event.type} event to this new client`)
-        next(stringifySourceEvent(event))
-      })
+        // send to everyone
+        if (welcomeEventPublic) {
+          write(stringifySourceEvent(welcomeEvent))
+        }
+        // send only to this client
+        else {
+          next(stringifySourceEvent(welcomeEvent))
+        }
+      } else {
+        const firstEvent = {
+          retry: retryDuration,
+          type: "comment",
+          data: new Date().toLocaleTimeString(),
+        }
+        next(stringifySourceEvent(firstEvent))
+      }
 
-      return client.unsubscribe
+      return () => {
+        clients.delete(client)
+        logger.debug(`A client left. Number of client in room: ${clients.size}`)
+      }
     })
 
-    logger.debug(
-      `client joined, number of client connected to event source: ${clients.size}, max allowed: ${maxClientAllowed}`,
-    )
+    const requestSSEObservable = connectRequestAndRoom(request, room, sseRoomObservable)
 
     return {
       status: 200,
@@ -108,28 +110,33 @@ export const createSSERoom = ({
         "cache-control": "no-store",
         "connection": "keep-alive",
       },
-      body,
+      body: requestSSEObservable,
     }
+  }
+
+  const leave = (request) => {
+    disconnectRequestFromRoom(request, room)
+  }
+
+  const addEventToHistory = (event) => {
+    if (typeof event.id === "undefined") {
+      event.id = computeEventId(event, previousEventId)
+    }
+    previousEventId = event.id
+    eventHistory.add(event)
   }
 
   const sendEvent = (event) => {
     if (event.type !== "comment") {
-      logger.debug(
-        `send ${event.type} event, number of client listening event source: ${clients.size}`,
-      )
-      if (typeof event.id === "undefined") {
-        event.id = computeEventId(event, previousEventId)
-      }
-      previousEventId = event.id
-      eventHistory.add(event)
+      logger.debug(`send ${event.type} event to ${clients.size} client in the room`)
+      addEventToHistory(event)
     }
-
     write(stringifySourceEvent(event))
   }
 
-  const eventsSince = (id) => {
+  const getAllEventSince = (id) => {
     const events = eventHistory.since(id)
-    if (welcomeEvent && !welcomeEventPublic) {
+    if (welcomeEventEnabled && !welcomeEventPublic) {
       return events.filter((event) => event.type !== "welcome")
     }
     return events
@@ -137,7 +144,7 @@ export const createSSERoom = ({
 
   const write = (data) => {
     clients.forEach((client) => {
-      client.write(data)
+      client.next(data)
     })
   }
 
@@ -161,10 +168,9 @@ export const createSSERoom = ({
 
   const close = () => {
     if (!opened) return
-    logger.debug(`closing, number of client to close: ${clients.size}`)
-    clients.forEach((client) => client.unsubscribe())
-    // each client.umsubscribe is doing clients.delete(connection)
-    // meaning at this stage clients.size is 0
+    logger.debug(`closing room, number of client in the room: ${clients.size}`)
+    clients.forEach((client) => client.complete())
+    clients.clear()
     clearInterval(interval)
     eventHistory.reset()
     opened = false
@@ -172,28 +178,66 @@ export const createSSERoom = ({
 
   open()
 
-  return {
+  Object.assign(room, {
     // main api:
-    // - ability to sendEvent to users in the room
+    // - ability to sendEvent to clients in the room
     // - ability to join the room
+    // - ability to leave the room
     sendEvent,
     join,
+    leave,
 
     // should rarely be necessary, get information about the room
-    eventsSince,
+    getAllEventSince,
     getRoomClientCount: () => clients.size,
 
     // should rarely be used
     close,
     open,
+  })
+  return room
+}
+
+const requestMap = new Map()
+
+const connectRequestAndRoom = (request, room, roomObservable) => {
+  let sseProducer
+  let roomObservableMap
+  const requestInfo = requestMap.get(request)
+  if (requestInfo) {
+    sseProducer = requestInfo.sseProducer
+    roomObservableMap = requestInfo.roomObservableMap
+  } else {
+    sseProducer = createCompositeProducer({
+      cleanup: () => {
+        requestMap.delete(request)
+      },
+    })
+    roomObservableMap = new Map()
+    requestMap.set(request, { sseProducer, roomObservableMap })
   }
+
+  roomObservableMap.set(room, roomObservable)
+  sseProducer.addObservable(roomObservable)
+
+  return createObservable(sseProducer)
+}
+
+const disconnectRequestFromRoom = (request, room) => {
+  const requestInfo = requestMap.get(request)
+  if (!requestInfo) {
+    return
+  }
+
+  const { sseProducer, roomObservableMap } = requestInfo
+  const roomObservable = roomObservableMap.get(room)
+  roomObservableMap.delete(room)
+  sseProducer.removeObservable(roomObservable)
 }
 
 // https://github.com/dmail-old/project/commit/da7d2c88fc8273850812972885d030a22f9d7448
 // https://github.com/dmail-old/project/commit/98b3ae6748d461ac4bd9c48944a551b1128f4459
-
 // https://github.com/dmail-old/http-eventsource/blob/master/lib/event-source.js
-
 // http://html5doctor.com/server-sent-events/
 const stringifySourceEvent = ({ data, type = "message", id, retry }) => {
   let string = ""

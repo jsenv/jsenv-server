@@ -77,7 +77,7 @@ export const observableFromValue = (value) => {
   })
 }
 
-export const createCompositeProducer = () => {
+export const createCompositeProducer = ({ cleanup = () => {} }) => {
   const observables = new Set()
   const observers = new Set()
 
@@ -156,6 +156,7 @@ export const createCompositeProducer = () => {
         subscription.unsubscribe()
       })
       subscriptions.clear()
+      cleanup()
     }
   }
 
