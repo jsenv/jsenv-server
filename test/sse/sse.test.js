@@ -64,8 +64,8 @@ const timeEllapsedPromise = (ms) => {
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
-    requestToResponse: () => {
-      return room.connect()
+    requestToResponse: (request) => {
+      return room.join(request)
     },
   })
   const eventSource = await openEventSource(server.origin)
@@ -98,7 +98,7 @@ const timeEllapsedPromise = (ms) => {
     logLevel: "warn",
     keepProcessAlive: false,
     requestToResponse: (request) => {
-      return room.connect(
+      return room.join(
         request.headers["last-event-id"] ||
           new URL(request.ressource, request.origin).searchParams.get("last-event-id"),
       )
@@ -139,7 +139,7 @@ const timeEllapsedPromise = (ms) => {
   assert({ actual, expected })
 
   {
-    const actual = room.clientCountGetter()
+    const actual = room.getRoomClientCount()
     const expected = 1
     assert({ actual, expected })
   }
@@ -149,7 +149,7 @@ const timeEllapsedPromise = (ms) => {
   // ensure event source is properly closed
   // and room takes that into accout
   {
-    const actual = room.clientCountGetter()
+    const actual = room.getRoomClientCount()
     const expected = 0
     assert({ actual, expected })
   }
@@ -165,10 +165,10 @@ const timeEllapsedPromise = (ms) => {
     keepProcessAlive: false,
     requestToResponse: (request) => {
       if (request.ressource === "/roomA") {
-        return roomA.connect(request.headers["last-event-id"])
+        return roomA.join(request)
       }
       if (request.ressource === "/roomB") {
-        return roomB.connect(request.headers["last-event-id"])
+        return roomB.join(request)
       }
       return null
     },
@@ -222,8 +222,8 @@ const timeEllapsedPromise = (ms) => {
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
-    requestToResponse: () => {
-      return room.connect()
+    requestToResponse: (request) => {
+      return room.join(request)
     },
   })
   const clientA = await openEventSource(server.origin)
@@ -234,7 +234,7 @@ const timeEllapsedPromise = (ms) => {
   })
   await timeEllapsedPromise(200)
   {
-    const actual = room.clientCountGetter()
+    const actual = room.getRoomClientCount()
     const expected = 2
     assert({ actual, expected })
   }
@@ -273,13 +273,13 @@ const timeEllapsedPromise = (ms) => {
 // there can be a limit to number of clients (100 by default)
 {
   const room = createSSERoom({
-    maxConnectionAllowed: 1,
+    maxClientAllowed: 1,
   })
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
-    requestToResponse: () => {
-      return room.connect()
+    requestToResponse: (request) => {
+      return room.join(request)
     },
   })
   const clientA = await openEventSource(server.origin)
@@ -311,8 +311,8 @@ const timeEllapsedPromise = (ms) => {
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,
-    requestToResponse: () => {
-      return room.connect()
+    requestToResponse: (request) => {
+      return room.join(request)
     },
   })
   try {

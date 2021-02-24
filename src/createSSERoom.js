@@ -9,14 +9,14 @@ export const createSSERoom = ({
   keepaliveDuration = 30 * 1000,
   retryDuration = 1 * 1000,
   historyLength = 1 * 1000,
-  maxConnectionAllowed = 100, // max 100 users accepted
+  maxClientAllowed = 100, // max 100 clients accepted
   computeEventId = (event, lastEventId) => lastEventId + 1,
   welcomeEvent = false,
   welcomeEventPublic = false,
 } = {}) => {
   const logger = createLogger({ logLevel })
 
-  const connections = new Set()
+  const clients = new Set()
   const eventHistory = createEventHistory(historyLength)
   // what about previousEventId that keeps growing ?
   // we could add some limit
@@ -25,16 +25,32 @@ export const createSSERoom = ({
   let opened = false
   let interval
 
-  const eventsSince = (id) => {
-    const events = eventHistory.since(id)
-    if (welcomeEvent && !welcomeEventPublic) {
-      return events.filter((event) => event.type !== "welcome")
+  const join = (request) => {
+    // should we ensure a given request can join a room only once?
+
+    return getSSEResponse(
+      request.headers["last-event-id"] ||
+        new URL(request.ressource, request.origin).searchParams.get("last-event-id"),
+    )
+  }
+
+  const sendEvent = (event) => {
+    if (event.type !== "comment") {
+      logger.debug(
+        `send ${event.type} event, number of client listening event source: ${clients.size}`,
+      )
+      if (typeof event.id === "undefined") {
+        event.id = computeEventId(event, previousEventId)
+      }
+      previousEventId = event.id
+      eventHistory.add(event)
     }
-    return events
+
+    write(stringifySourceEvent(event))
   }
 
   const getSSEResponse = (lastKnownId) => {
-    if (connections.size >= maxConnectionAllowed) {
+    if (clients.size >= maxClientAllowed) {
       return {
         status: 503,
       }
@@ -48,11 +64,11 @@ export const createSSERoom = ({
 
     const firstEvent = {
       retry: retryDuration,
-      type: welcomeEvent ? "welcome" : "comment",
+      type: "comment",
       data: new Date().toLocaleTimeString(),
     }
-
     if (welcomeEvent) {
+      firstEvent.type = "welcome"
       firstEvent.id = computeEventId(firstEvent, previousEventId)
       previousEventId = firstEvent.id
       eventHistory.add(firstEvent)
@@ -64,6 +80,12 @@ export const createSSERoom = ({
       firstEvent,
     ]
 
+    // et si on veut mettre une request dans 2 rooms ?
+    // ou alors quitter une room puis en rejoindre une autre?
+    // c'est pas vraiment possible pour le moment
+    // pour que ça marche il faudrait que le body ci dessous
+    // puisse etre subscribe plusieurs fois, et unsubscribe on demand
+
     const body = createObservable({
       subscribe: ({ next }) => {
         events.forEach((event) => {
@@ -71,21 +93,21 @@ export const createSSERoom = ({
           next(stringifySourceEvent(event))
         })
 
-        const connection = {
+        const client = {
           write: next,
         }
 
         const unsubscribe = () => {
-          if (connections.has(connection)) {
-            connections.delete(connection)
+          if (clients.has(client)) {
+            clients.delete(client)
             logger.debug(
-              `connection closed by us, number of client connected to event source: ${connections.size}`,
+              `client connection closed by us, number of client connected to event source: ${clients.size}`,
             )
           }
         }
 
-        connection.unsubscribe = unsubscribe
-        connections.add(connection)
+        client.unsubscribe = unsubscribe
+        clients.add(client)
 
         return {
           unsubscribe,
@@ -94,7 +116,7 @@ export const createSSERoom = ({
     })
 
     logger.debug(
-      `client joined, number of client connected to event source: ${connections.size}, max allowed: ${maxConnectionAllowed}`,
+      `client joined, number of client connected to event source: ${clients.size}, max allowed: ${maxClientAllowed}`,
     )
 
     return {
@@ -108,39 +130,23 @@ export const createSSERoom = ({
     }
   }
 
-  const join = (request) => {
-    return getSSEResponse(
-      request.headers["last-event-id"] ||
-        new URL(request.ressource, request.origin).searchParams.get("last-event-id"),
-    )
+  const eventsSince = (id) => {
+    const events = eventHistory.since(id)
+    if (welcomeEvent && !welcomeEventPublic) {
+      return events.filter((event) => event.type !== "welcome")
+    }
+    return events
   }
 
   const write = (data) => {
-    connections.forEach((connection) => {
-      connection.write(data)
+    clients.forEach((client) => {
+      client.write(data)
     })
-  }
-
-  const sendEvent = (event) => {
-    if (event.type !== "comment") {
-      logger.debug(
-        `send ${event.type} event, number of client listening event source: ${connections.size}`,
-      )
-      if (typeof event.id === "undefined") {
-        event.id = computeEventId(event, previousEventId)
-      }
-      previousEventId = event.id
-      eventHistory.add(event)
-    }
-
-    write(stringifySourceEvent(event))
   }
 
   const keepAlive = () => {
     // maybe that, when an event occurs, we can delay the keep alive event
-    logger.debug(
-      `send keep alive event, number of client listening event source: ${connections.size}`,
-    )
+    logger.debug(`send keep alive event, number of client listening event source: ${clients.size}`)
     sendEvent({
       type: "comment",
       data: new Date().toLocaleTimeString(),
@@ -158,10 +164,10 @@ export const createSSERoom = ({
 
   const close = () => {
     if (!opened) return
-    logger.debug(`closing, number of client to close: ${connections.size}`)
-    connections.forEach((connection) => connection.unsubscribe())
-    // each connection.umsubscribe is doing connections.delete(connection)
-    // meaning at this stage connections.size is 0
+    logger.debug(`closing, number of client to close: ${clients.size}`)
+    clients.forEach((client) => client.unsubscribe())
+    // each client.umsubscribe is doing clients.delete(connection)
+    // meaning at this stage clients.size is 0
     clearInterval(interval)
     eventHistory.reset()
     opened = false
@@ -170,14 +176,19 @@ export const createSSERoom = ({
   open()
 
   return {
-    open,
-    close,
-    getSSEResponse,
-    join,
-    eventsSince,
+    // main api:
+    // - ability to sendEvent to users in the room
+    // - ability to join the room
     sendEvent,
+    join,
 
-    clientCountGetter: () => connections.size,
+    // should rarely be necessary, get information about the room
+    eventsSince,
+    getRoomClientCount: () => clients.size,
+
+    // should rarely be used
+    close,
+    open,
   }
 }
 
