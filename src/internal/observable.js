@@ -2,9 +2,9 @@ if ("observable" in Symbol === false) {
   Symbol.observable = Symbol.for("observable")
 }
 
-export const createObservable = (subscribe) => {
-  if (typeof subscribe !== "function") {
-    throw new TypeError(`subscribe must be a function, got ${subscribe}`)
+export const createObservable = (producer) => {
+  if (typeof producer !== "function") {
+    throw new TypeError(`producer must be a function, got ${producer}`)
   }
 
   const observable = {
@@ -25,7 +25,7 @@ export const createObservable = (subscribe) => {
         },
       }
 
-      const unsubscribeReturnValue = subscribe({
+      const producerReturnValue = producer({
         next: (value) => {
           if (subscription.closed) return
           next(value)
@@ -39,8 +39,8 @@ export const createObservable = (subscribe) => {
           complete()
         },
       })
-      if (typeof unsubscribeReturnValue === "function") {
-        cleanup = unsubscribeReturnValue
+      if (typeof producerReturnValue === "function") {
+        cleanup = producerReturnValue
       }
       return subscription
     },
@@ -77,7 +77,7 @@ export const observableFromValue = (value) => {
   })
 }
 
-export const createCompositeObservable = () => {
+export const createCompositeProducer = () => {
   const observables = new Set()
   const observers = new Set()
 
@@ -105,64 +105,62 @@ export const createCompositeObservable = () => {
     return true
   }
 
-  const compositeObservable = createObservable(
-    ({ next = () => {}, error = () => {}, complete = () => {} }) => {
-      let completeCount = 0
+  const producer = ({ next = () => {}, complete = () => {}, error = () => {} }) => {
+    let completeCount = 0
 
-      const checkComplete = () => {
-        if (completeCount === observables.size) {
-          complete()
-        }
+    const checkComplete = () => {
+      if (completeCount === observables.size) {
+        complete()
       }
+    }
 
-      const subscriptions = new Map()
-      const observe = (observable) => {
-        const subscription = observable.subscribe({
-          next: (value) => {
-            next(value)
-          },
-          error: (value) => {
-            error(value)
-          },
-          complete: () => {
-            subscriptions.delete(observable)
-            completeCount++
-            checkComplete()
-          },
-        })
-        subscriptions.set(observable, subscription)
-      }
-      const unobserve = (observable) => {
-        const subscription = subscriptions.get(observable)
-        if (!subscription) {
-          return
-        }
-
-        subscription.unsubscribe()
-        subscriptions.delete(observable)
-        checkComplete()
-      }
-      const observer = {
-        observe,
-        unobserve,
-      }
-      observers.add(observer)
-      observables.forEach((observable) => {
-        observe(observable)
+    const subscriptions = new Map()
+    const observe = (observable) => {
+      const subscription = observable.subscribe({
+        next: (value) => {
+          next(value)
+        },
+        error: (value) => {
+          error(value)
+        },
+        complete: () => {
+          subscriptions.delete(observable)
+          completeCount++
+          checkComplete()
+        },
       })
-
-      return () => {
-        observers.delete(observer)
-        subscriptions.forEach((subscription) => {
-          subscription.unsubscribe()
-        })
-        subscriptions.clear()
+      subscriptions.set(observable, subscription)
+    }
+    const unobserve = (observable) => {
+      const subscription = subscriptions.get(observable)
+      if (!subscription) {
+        return
       }
-    },
-  )
 
-  compositeObservable.addObservable = addObservable
-  compositeObservable.removeObservable = removeObservable
+      subscription.unsubscribe()
+      subscriptions.delete(observable)
+      checkComplete()
+    }
+    const observer = {
+      observe,
+      unobserve,
+    }
+    observers.add(observer)
+    observables.forEach((observable) => {
+      observe(observable)
+    })
 
-  return compositeObservable
+    return () => {
+      observers.delete(observer)
+      subscriptions.forEach((subscription) => {
+        subscription.unsubscribe()
+      })
+      subscriptions.clear()
+    }
+  }
+
+  producer.addObservable = addObservable
+  producer.removeObservable = removeObservable
+
+  return producer
 }

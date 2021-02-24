@@ -1,7 +1,4 @@
-import {
-  createObservable,
-  createCompositeObservable,
-} from "@jsenv/server/src/internal/observable.js"
+import { createObservable, createCompositeProducer } from "@jsenv/server/src/internal/observable.js"
 import { assert } from "@jsenv/assert"
 
 const createObservableSource = () => {
@@ -15,11 +12,12 @@ const createObservableSource = () => {
 {
   const sourceA = createObservableSource()
   const sourceB = createObservableSource()
-  const sourceComposite = createCompositeObservable()
-  sourceComposite.addObservable(sourceA)
-  sourceComposite.addObservable(sourceB)
+  const compositeProducer = createCompositeProducer()
+  const compositeSource = createObservable(compositeProducer)
+  compositeProducer.addObservable(sourceA)
+  compositeProducer.addObservable(sourceB)
   const nextCalls = []
-  sourceComposite.subscribe({
+  compositeSource.subscribe({
     next: (value) => {
       nextCalls.push(value)
     },
@@ -42,15 +40,16 @@ const createObservableSource = () => {
 // can add after subscribe
 {
   const source = createObservableSource()
-  const sourceComposite = createCompositeObservable()
+  const compositeProducer = createCompositeProducer()
+  const compositeSource = createObservable(compositeProducer)
   const nextCalls = []
-  sourceComposite.subscribe({
+  compositeSource.subscribe({
     next: (value) => {
       nextCalls.push(value)
     },
   })
 
-  sourceComposite.addObservable(source)
+  compositeProducer.addObservable(source)
 
   const nextCallsBefore = nextCalls.slice()
   source.next("foo")
@@ -69,15 +68,16 @@ const createObservableSource = () => {
 // can remove after subscribe
 {
   const source = createObservableSource()
-  const sourceComposite = createCompositeObservable()
-  sourceComposite.addObservable(source)
+  const compositeProducer = createCompositeProducer()
+  const compositeSource = createObservable(compositeProducer)
+  compositeProducer.addObservable(source)
   const nextCalls = []
-  sourceComposite.subscribe({
+  compositeSource.subscribe({
     next: (value) => {
       nextCalls.push(value)
     },
   })
-  sourceComposite.removeObservable(source)
+  compositeProducer.removeObservable(source)
 
   const nextCallsBefore = nextCalls.slice()
   source.next("foo")
@@ -97,11 +97,12 @@ const createObservableSource = () => {
 {
   const sourceA = createObservableSource()
   const sourceB = createObservableSource()
-  const sourceComposite = createCompositeObservable()
-  sourceComposite.addObservable(sourceA)
-  sourceComposite.addObservable(sourceB)
+  const compositeProducer = createCompositeProducer()
+  const compositeSource = createObservable(compositeProducer)
+  compositeProducer.addObservable(sourceA)
+  compositeProducer.addObservable(sourceB)
   let completeCalled = false
-  sourceComposite.subscribe({
+  compositeSource.subscribe({
     complete: () => {
       completeCalled = true
     },
@@ -130,11 +131,12 @@ const createObservableSource = () => {
 {
   const sourceA = createObservableSource()
   const sourceB = createObservableSource()
-  const sourceComposite = createCompositeObservable()
-  sourceComposite.addObservable(sourceA)
-  sourceComposite.addObservable(sourceB)
+  const compositeProducer = createCompositeProducer()
+  const compositeSource = createObservable(compositeProducer)
+  compositeProducer.addObservable(sourceA)
+  compositeProducer.addObservable(sourceB)
   let completeCalled = false
-  sourceComposite.subscribe({
+  compositeSource.subscribe({
     complete: () => {
       completeCalled = true
     },
@@ -143,7 +145,7 @@ const createObservableSource = () => {
   const completeCalledBefore = completeCalled
   sourceA.complete()
   const completeCalledAfterSourceAComplete = completeCalled
-  sourceComposite.removeObservable(sourceB)
+  compositeProducer.removeObservable(sourceB)
   const completeCalledAfterSourceBRemoved = completeCalled
 
   const actual = {
@@ -162,16 +164,17 @@ const createObservableSource = () => {
 // subscription complete when all source are complete
 {
   const observable = createObservable(() => {})
-  const sourceComposite = createCompositeObservable()
-  sourceComposite.addObservable(observable)
+  const compositeProducer = createCompositeProducer()
+  const compositeSource = createObservable(compositeProducer)
+  compositeProducer.addObservable(observable)
   let completeCalled = false
-  sourceComposite.subscribe({
+  compositeSource.subscribe({
     complete: () => {
       completeCalled = true
     },
   })
   const completeCalledBefore = completeCalled
-  sourceComposite.removeObservable(observable)
+  compositeProducer.removeObservable(observable)
 
   const actual = {
     completeCalledBefore,
