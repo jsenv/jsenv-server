@@ -77,7 +77,7 @@ export const observableFromValue = (value) => {
   })
 }
 
-export const createCompositeProducer = ({ cleanup = () => {} }) => {
+export const createCompositeProducer = ({ cleanup = () => {} } = {}) => {
   const observables = new Set()
   const observers = new Set()
 
