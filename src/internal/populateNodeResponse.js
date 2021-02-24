@@ -86,15 +86,25 @@ const headersToNodeHeaders = (headers, { ignoreConnectionHeader }) => {
 }
 
 const bodyToObservable = (body) => {
-  if (isObservable(body)) return body
-  if (isNodeStream(body)) return nodeStreamToObservable(body)
+  if (isObservable(body)) {
+    return body
+  }
+
+  if (isNodeStream(body)) {
+    return nodeStreamToObservable(body)
+  }
+
   return valueToObservable(body)
 }
 
 const isNodeStream = (value) => {
-  if (value === undefined) return false
-  if (value instanceof Stream) return true
-  if (value instanceof Writable) return true
-  if (value instanceof Readable) return true
+  if (value === undefined) {
+    return false
+  }
+
+  if (value instanceof Stream || value instanceof Writable || value instanceof Readable) {
+    return true
+  }
+
   return false
 }

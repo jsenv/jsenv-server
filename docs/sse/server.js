@@ -16,6 +16,6 @@ startServer({
     if (!accept.includes("text/event-stream")) {
       return null
     }
-    return room.connectRequest(request)
+    return room.join(request)
   },
 })

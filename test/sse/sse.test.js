@@ -88,7 +88,7 @@ const timeEllapsedPromise = (ms) => {
   }
   assert({ actual, expected })
   await closeEventSource(eventSource)
-  room.stop()
+  room.close()
 }
 
 // a client is notified of events occuring while he is disconnected
@@ -153,7 +153,7 @@ const timeEllapsedPromise = (ms) => {
     const expected = 0
     assert({ actual, expected })
   }
-  room.stop()
+  room.close()
 }
 
 // a server can have many rooms and client can connect the one he wants
@@ -212,8 +212,8 @@ const timeEllapsedPromise = (ms) => {
 
   await closeEventSource(roomAEventSource)
   await closeEventSource(roomBEventSource)
-  roomA.stop()
-  roomB.stop()
+  roomA.close()
+  roomB.close()
 }
 
 // a room can have many clients
@@ -267,7 +267,7 @@ const timeEllapsedPromise = (ms) => {
 
   await closeEventSource(clientA)
   await closeEventSource(clientB)
-  room.stop()
+  room.close()
 }
 
 // there can be a limit to number of clients (100 by default)
@@ -300,14 +300,14 @@ const timeEllapsedPromise = (ms) => {
     assert({ actual, expected })
   } finally {
     await closeEventSource(clientA)
-    room.stop()
+    room.close()
   }
 }
 
 // test whats happens with a room that is not started or is stopped
 {
   const room = createSSERoom()
-  room.stop()
+  room.close()
   const server = await startServer({
     logLevel: "warn",
     keepProcessAlive: false,

@@ -22,7 +22,7 @@ export const createSSERoom = ({
   // we could add some limit
   // one limit could be that an event older than 24h is deleted
   let previousEventId = 0
-  let opened = true
+  let opened = false
   let interval
 
   const eventsSince = (id) => {
@@ -33,12 +33,13 @@ export const createSSERoom = ({
     return events
   }
 
-  const connect = (lastKnownId) => {
+  const getSSEResponse = (lastKnownId) => {
     if (connections.size >= maxConnectionAllowed) {
       return {
         status: 503,
       }
     }
+
     if (!opened) {
       return {
         status: 204,
@@ -107,8 +108,8 @@ export const createSSERoom = ({
     }
   }
 
-  const connectRequest = (request) => {
-    return connect(
+  const join = (request) => {
+    return getSSEResponse(
       request.headers["last-event-id"] ||
         new URL(request.ressource, request.origin).searchParams.get("last-event-id"),
     )
@@ -146,7 +147,7 @@ export const createSSERoom = ({
     })
   }
 
-  const start = () => {
+  const open = () => {
     if (opened) return
     opened = true
     interval = setInterval(keepAlive, keepaliveDuration)
@@ -155,20 +156,24 @@ export const createSSERoom = ({
     }
   }
 
-  const stop = () => {
+  const close = () => {
     if (!opened) return
-    logger.debug(`stopping, number of client to close: ${connections.size}`)
+    logger.debug(`closing, number of client to close: ${connections.size}`)
     connections.forEach((connection) => connection.unsubscribe())
+    // each connection.umsubscribe is doing connections.delete(connection)
+    // meaning at this stage connections.size is 0
     clearInterval(interval)
     eventHistory.reset()
     opened = false
   }
 
+  open()
+
   return {
-    start,
-    stop,
-    connect,
-    connectRequest,
+    open,
+    close,
+    getSSEResponse,
+    join,
     eventsSince,
     sendEvent,
 
