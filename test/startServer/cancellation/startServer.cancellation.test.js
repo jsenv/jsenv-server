@@ -63,11 +63,9 @@ const server = await startServer({
   const cancellationSource = createCancellationSource()
   serverResponsePromise = Promise.resolve({
     status: 200,
-    body: createObservable({
-      subscribe: ({ next }) => {
-        next("Hello")
-        // never call complete, response is pending
-      },
+    body: createObservable(({ next }) => {
+      next("Hello")
+      // never call complete, response is pending
     }),
   })
   const clientResponsePromise = fetchUrl(server.origin, {

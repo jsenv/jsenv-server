@@ -9,7 +9,7 @@
 import { constants } from "http2"
 import { Stream, Writable, Readable } from "stream"
 import { composeCancellationToken, createCancellationSource } from "@jsenv/cancellation"
-import { isObservable, subscribe, observableFromValue } from "../src/internal/observable.js"
+import { isObservable, observableFromValue } from "../src/internal/observable.js"
 import { nodeStreamToObservable } from "../src/internal/nodeStreamToObservable.js"
 import { headersFromObject } from "../src/internal/headersFromObject.js"
 
@@ -167,7 +167,7 @@ export const populateHttp2Stream = (
   }
 
   const observable = observableFromBody(body)
-  const subscription = subscribe(observable, {
+  const subscription = observable.subscribe({
     next: (data) => {
       http2Stream.end(data)
     },

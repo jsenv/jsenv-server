@@ -86,19 +86,15 @@ export const createSSERoom = ({
     }
     clients.add(client)
 
-    const body = createObservable({
-      subscribe: ({ next }) => {
-        client.write = next
+    const body = createObservable(({ next }) => {
+      client.write = next
 
-        events.forEach((event) => {
-          logger.debug(`send ${event.type} event to this new client`)
-          next(stringifySourceEvent(event))
-        })
+      events.forEach((event) => {
+        logger.debug(`send ${event.type} event to this new client`)
+        next(stringifySourceEvent(event))
+      })
 
-        return {
-          unsubscribe: client.unsubscribe,
-        }
-      },
+      return client.unsubscribe
     })
 
     logger.debug(

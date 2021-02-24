@@ -1,5 +1,5 @@
 import { Stream, Writable, Readable } from "stream"
-import { isObservable, subscribe, observableFromValue } from "./observable.js"
+import { isObservable, observableFromValue } from "./observable.js"
 import { nodeStreamToObservable } from "./nodeStreamToObservable.js"
 
 export const populateNodeResponse = (
@@ -25,7 +25,7 @@ export const populateNodeResponse = (
   }
 
   const observable = bodyToObservable(body)
-  const subscription = subscribe(observable, {
+  const subscription = observable.subscribe({
     next: (data) => {
       try {
         nodeResponse.write(data)
