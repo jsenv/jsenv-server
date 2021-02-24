@@ -30,9 +30,31 @@ export const subscribe = (
 }
 
 export const isObservable = (value) => {
-  if (value === null) return false
-  if (value === undefined) return false
-  if (typeof value === "object") return Symbol.observable in value
-  if (typeof value === "function") return Symbol.observable in value
+  if (value === null || value === undefined) {
+    return false
+  }
+
+  if (typeof value === "object" || typeof value === "function") {
+    return Symbol.observable in value
+  }
+
   return false
 }
+
+export const observableFromValue = (value) => {
+  return createObservable({
+    subscribe: ({ next, complete }) => {
+      next(value)
+      const timer = setTimeout(() => {
+        complete()
+      })
+      return {
+        unsubscribe: () => {
+          clearTimeout(timer)
+        },
+      }
+    },
+  })
+}
+
+//

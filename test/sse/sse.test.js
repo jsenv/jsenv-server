@@ -98,10 +98,7 @@ const timeEllapsedPromise = (ms) => {
     logLevel: "warn",
     keepProcessAlive: false,
     requestToResponse: (request) => {
-      return room.join(
-        request.headers["last-event-id"] ||
-          new URL(request.ressource, request.origin).searchParams.get("last-event-id"),
-      )
+      return room.join(request)
     },
   })
   let eventSource = await openEventSource(server.origin)

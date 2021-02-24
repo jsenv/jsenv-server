@@ -9,9 +9,8 @@
 import { constants } from "http2"
 import { Stream, Writable, Readable } from "stream"
 import { composeCancellationToken, createCancellationSource } from "@jsenv/cancellation"
-import { isObservable, subscribe } from "../src/internal/observable.js"
+import { isObservable, subscribe, observableFromValue } from "../src/internal/observable.js"
 import { nodeStreamToObservable } from "../src/internal/nodeStreamToObservable.js"
-import { valueToObservable } from "../src/internal/valueToObservable.js"
 import { headersFromObject } from "../src/internal/headersFromObject.js"
 
 const { NGHTTP2_NO_ERROR } = constants
@@ -167,7 +166,7 @@ export const populateHttp2Stream = (
     http2Stream.setEncoding(bodyEncoding)
   }
 
-  const observable = bodyToObservable(body)
+  const observable = observableFromBody(body)
   const subscription = subscribe(observable, {
     next: (data) => {
       http2Stream.end(data)
@@ -206,16 +205,26 @@ const headersToNodeHeaders = (headers) => {
   return nodeHeaders
 }
 
-const bodyToObservable = (body) => {
-  if (isObservable(body)) return body
-  if (isNodeStream(body)) return nodeStreamToObservable(body)
-  return valueToObservable(body)
+const observableFromBody = (body) => {
+  if (isObservable(body)) {
+    return body
+  }
+
+  if (isNodeStream(body)) {
+    return nodeStreamToObservable(body)
+  }
+
+  return observableFromValue(body)
 }
 
 const isNodeStream = (value) => {
-  if (value === undefined) return false
-  if (value instanceof Stream) return true
-  if (value instanceof Writable) return true
-  if (value instanceof Readable) return true
+  if (value === undefined) {
+    return false
+  }
+
+  if (value instanceof Stream || value instanceof Writable || value instanceof Readable) {
+    return true
+  }
+
   return false
 }

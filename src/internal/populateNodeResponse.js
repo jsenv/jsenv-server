@@ -1,7 +1,6 @@
 import { Stream, Writable, Readable } from "stream"
-import { isObservable, subscribe } from "./observable.js"
+import { isObservable, subscribe, observableFromValue } from "./observable.js"
 import { nodeStreamToObservable } from "./nodeStreamToObservable.js"
-import { valueToObservable } from "./valueToObservable.js"
 
 export const populateNodeResponse = (
   nodeResponse,
@@ -94,7 +93,7 @@ const bodyToObservable = (body) => {
     return nodeStreamToObservable(body)
   }
 
-  return valueToObservable(body)
+  return observableFromValue(body)
 }
 
 const isNodeStream = (value) => {
