@@ -60,45 +60,6 @@ const { startServer } = require("@jsenv/server")
 Non exhaustive list of features in `@jsenv/server`.
 
 <details>
-  <summary>https ready</summary>
-
-Server can be started in https without https certificate (a default certificate will be used). Very useful when you don't have https certificate within easy reach but want to start server in https.
-
-```js
-import { startServer } from "@jsenv/server"
-
-startServer({
-  protocol: "https",
-})
-```
-
-Read more in [Protocol and certificate](#Protocol-and-certificate).
-
-</details>
-
-<details>
-  <summary>https redirection</summary>
-
-When server is started in `https` mode, `http` request are auto redirected to `https`. Read more in [redirectHttpToHttps](#redirectHttpToHttps).
-
-</details>
-
-<details>
-  <summary>http2 compatible</summary>
-
-Make your server use `http2` with one line.
-
-```js
-import { startServer } from "@jsenv/server"
-
-startServer({
-  http2: true,
-})
-```
-
-</details>
-
-<details>
   <summary>Pure function</summary>
 
 `@jsenv/server` allows to write server logic using pure function. It makes your code easier to read and unit test.
@@ -141,6 +102,45 @@ const pureMiddleware = (request) => {
 ```
 
 > A _pure middleware_ is called a _service_ in `@jsenv/server` terminology. Read more in [Services and composition](#Services-and-composition)
+
+</details>
+
+<details>
+  <summary>https ready</summary>
+
+Server can be started in https without https certificate (a default certificate will be used). Very useful when you don't have https certificate within easy reach but want to start server in https.
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  protocol: "https",
+})
+```
+
+Read more in [Protocol and certificate](#Protocol-and-certificate).
+
+</details>
+
+<details>
+  <summary>https redirection</summary>
+
+When server is started in `https` mode, `http` request are auto redirected to `https`. Read more in [redirectHttpToHttps](#redirectHttpToHttps).
+
+</details>
+
+<details>
+  <summary>http2 compatible</summary>
+
+Make your server use `http2` with one line.
+
+```js
+import { startServer } from "@jsenv/server"
+
+startServer({
+  http2: true,
+})
+```
 
 </details>
 
